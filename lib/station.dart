@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:reticulum/reticulum.dart' show NostrCrypto, Tier;
 import 'package:xprs_core/src/platform/core_host.dart';
 import 'package:xprs_core/src/platform/heartbeat_keep_alive.dart';
 import 'package:xprs_core/src/profile/profile_service.dart';
@@ -30,6 +31,10 @@ import 'package:xprs_core/src/services/receive/packet_gateway.dart';
 import 'package:xprs_core/src/services/reticulum/rns_service.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
+import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
+import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
+import 'package:xprs_core/src/services/xprs/xprs_packet.dart';
+import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 
@@ -84,6 +89,9 @@ class Station {
 
     xprsBindWireCallsign();
     await MeshService.instance.start(canAdvertise: false);
+    // Every verified act about a room this station runs (its own rooms and
+    // the ones it hosts) goes to the group store, which a restart replays.
+    XprsGroups.instance.onActVerified = XprsGroupKeys.instance.putAct;
     LogService.instance.add('server: mesh core up as $callsign');
   }
 
@@ -184,6 +192,46 @@ class Station {
     // The administrator and the visitor settings live with the station's.
     store: _store,
     isLocalPeer: isLocalPeer,
+    // XPRS.md 10.10: the station is the group of its own rooms. Its key signs
+    // the administrator's acts, and they go out like any of its packets.
+    groups: XprsGroups.instance,
+    signAsStation: (canonical) {
+      final p = XprsPacket.parse(canonical);
+      final d = xprsProfileScalar();
+      return p == null || d == null ? null : xprsSign(p, d);
+    },
+    publish: (w) => unawaited(XprsPublisher.instance.publishWire(w)),
+    // Rooms the station hosts (XPRS.md 10.10.1): their keys in the group
+    // store, their traffic filed here and never aired, read back by `d:`.
+    roomKeys: WebChatRoomKeys(
+      create: (nick) {
+        final g = XprsGroupKeys.instance.create(nick: nick);
+        if (g == null) return null;
+        // Teach the callsign->key map the room before anything is signed
+        // with it: a station does not hear itself (XprsGroupOps.create).
+        try {
+          RnsService.instance
+              .recordCallsignPubkey(g.callsign, NostrCrypto.decodeNpub(g.npub));
+        } catch (_) {}
+        return g.callsign;
+      },
+      scalar: XprsGroupKeys.instance.scalarFor,
+    ),
+    keep: (w) {
+      final p = XprsPacket.parse(w);
+      if (p == null) return;
+      XprsArchive.instance.admit(p, bearer: 'web', tier: Tier.self);
+      // Visible to the next poll, not in twenty seconds.
+      XprsArchive.instance.flush();
+    },
+    roomRows: ({required room, sinceMs, untilMs, required limit}) =>
+        XprsArchive.instance.query(
+          sinceMs: sinceMs,
+          untilMs: untilMs,
+          types: const ['message', 'reaction'],
+          to: [room],
+          limit: limit,
+        ),
   );
 
   /// The station's own network: private addresses, plus the IPv6 /64s this
