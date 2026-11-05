@@ -1,0 +1,23 @@
+name: xprs_server
+description: >-
+  The XPRS server edition: a headless station for Linux. A Reticulum transport
+  node on the internet, a bridge for the devices on its own network, and the
+  web chat page, all on the shared core (xprs-dev/core).
+version: 0.1.0
+repository: https://github.com/xprs-dev/server
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  xprs_core:
+    path: ../core
+  args: ^2.5.0
+  hex: ^0.2.0
+  reticulum:
+    path: ../reticulum-dart
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^5.0.0

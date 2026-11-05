@@ -1,0 +1,7 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  errors:
+    # The core is imported by path (package:xprs_core/src/...), the way the
+    # app imports it; it has no public barrel for most of it yet.
+    implementation_imports: ignore
