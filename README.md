@@ -80,7 +80,6 @@ config file > built-in default**.
 | `nickname` | `--nickname` | XPRS server | name given to a new identity |
 | `public_archiver` | `--[no-]public-archiver` | on | keep public history for others |
 | `data_dir` | `--data-dir` | HOME as it is | identity, archive, settings |
-| `page` | `--page` | built into the program | an HTML file to serve instead, to customise the page |
 | `log_file` | `--log-file` | stdout only | also append the log here |
 
 The file is found in this order: `--config PATH`, `$XPRS_SERVER_CONFIG`,

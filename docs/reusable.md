@@ -6,7 +6,7 @@ the core; `../core/docs/reusable.md` lists it.
 | What | Where | Reuse it for |
 |---|---|---|
 | `FileKeyValueStore` | `lib/host/file_key_value_store.dart` | any host of the core with no shared_preferences: the core's `KeyValueStore` over one JSON file, atomic replace, writes coalesced per event-loop turn, a damaged file kept aside |
-| `WebChatServer` | `lib/http/web_chat_server.dart` | serving the webchat page (gzipped once) and `WebChatApi` over `dart:io`. The app's `ShareAppService` has the same socket half plus the APK download; a candidate to move to core as one class both use |
+| `WebChatServer` | `lib/http/web_chat_server.dart` | serving the webchat page (gzipped once) and `WebChatApi` over `dart:io`, HTTP or HTTPS (`startSecure`); it is the core `PublicName`'s `AcmeWebServer` (ACME challenges, redirect to HTTPS). The app's `ShareAppService` has the same socket half plus the APK download; a candidate to move to core as one class both use |
 | `Station.webChatApi()` | `lib/station.dart` | wiring `WebChatApi` to the core (archive rows, receive door, publisher). Identical to `ShareAppService._liveApi()` in the app; also a candidate for core |
 | `parseHostPort` | `lib/station.dart` | `host[:port]` hub entries, default 4242. Duplicates `_parseHostPort` in the app's `rns_autostart.dart`: move both to core when either changes |
 | `LogService.onLine` | core `services/log_service.dart` | a host that prints the log (console, journal) |
@@ -17,3 +17,5 @@ the core; `../core/docs/reusable.md` lists it.
 | `AutostartBackend` / `ServiceStep` / `runSteps` | `lib/autostart/autostart.dart` | boot integration per OS as dry-runnable steps. Nothing in it is server-specific except names: a candidate for core so the desktop app's "start with the computer" can add launchd and Windows backends to the same interface |
 | `SystemdBackend`, `renderUnit` | `lib/autostart/systemd.dart` | a systemd unit (system or user) generated from the binary's own path |
 | `tool/embed_page.dart` + `embeddedPage()` | `tool/`, `lib/web/embedded_page.dart` | shipping a data file inside a `dart compile exe` binary (gzip + base64 in a generated const). Any host that must be a single file |
+| `tool/public_name_check.dart` | | what the public-name loop sees from a machine (public addresses, nip.io names, the UPnP router), changing nothing |
+| `Station.isLocalPeer` | `lib/station.dart` | "is this visitor on our network": private addresses plus the IPv6 /64s the machine holds (read at most once a minute) |

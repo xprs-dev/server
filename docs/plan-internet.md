@@ -13,7 +13,7 @@ does nothing.
 
 ## 2. Dynamic DNS services a program can use (checked 2026-11-05)
 
-| Service | Claiming a name | IPv6 | TXT for ACME DNS-01 | Keeping it |
+| Service | Claiming a name | IPv6 | TXT (not needed: certificates use HTTP-01) | Keeping it |
 |---|---|---|---|---|
 | **freemyip.com** | "No login required": pick a free name and get a token. No captcha on the claim form. **Not yet confirmed** that the whole claim works from a program: needs one test claim (**N1**) | `&myip=` takes an IPv6 address | `&txt=` sets/clears a TXT record | one update a year; a deleted name is blocked for 12 months |
 | **myaddr** (`myaddr.tools` / `.dev` / `.io`) | no account, no personal data, but the claim page has a Cloudflare Turnstile challenge: **a person claims once**, then the server holds the key | `ip=` any v4/v6, one of each | `acme_challenge=`, served on `_acme-challenge`, removed after a few minutes | update each address every 90 days; released after 120 days without updates |
@@ -40,9 +40,12 @@ and nip.io is the name it always has even before any claim.
    changes, and at the provider's minimum interval otherwise (a year for
    freemyip, 90 days for myaddr). The address watch is the host's job, cheap,
    and outside the core.
-4. **Certificate.** Let's Encrypt by **DNS-01**, through the provider's TXT
-   API. It needs no inbound connection, so the server has its certificate
-   whether or not anyone can reach it yet. It renews automatically.
+4. **Certificate.** Let's Encrypt by **HTTP-01** (corrected 2026-11-05: the
+   earlier DNS-01/TXT design was unnecessary): the server answers the
+   challenge itself on port 80, so no provider TXT API is needed and any
+   name that resolves to the server works. The certificate is only useful
+   once the server is reachable, which HTTP-01 already requires. It renews
+   automatically.
 5. **Serve.** HTTPS on 443 with the page and the visitor API; port 80
    redirects.
 6. **Announce.** The current URL goes in the server's signed announcement
@@ -75,8 +78,8 @@ where the router permits it (no operator action), is **N3**.
 1. **Name.** The provider interface, freemyip and myaddr (and the
    token-based ones), nip.io always; claim, store, update on address change;
    the name in the log and `/api/status`. Testable here.
-2. **Certificate and HTTPS.** An ACME client in Dart for DNS-01, using the
-   provider's TXT; the staging endpoint in tests; 443 plus the 80 redirect.
+2. **Certificate and HTTPS.** An ACME client in Dart for HTTP-01 (served on
+   port 80); the staging endpoint in tests; 443 plus the 80 redirect.
 3. **Announce and show.** `url:` in the signed announcement; link and QR in the
    page and the app.
 4. **Reachability check.** The signed connect-back by another XPRS station,
@@ -101,5 +104,31 @@ where the router permits it (no operator action), is **N3**.
 - myaddr: https://myaddr.tools
 - dyn.direct (dead): https://github.com/csnewman/dyndirect
 - nip.io: https://nip.io/
-- Let's Encrypt (DNS-01; IP and short-lived certificates):
+- Let's Encrypt (HTTP-01; IP and short-lived certificates):
   https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability
+
+## Findings 2026-11-05 (investigation of free name options, station X3PTZM)
+
+Network facts on the Pi (FRITZ!Box 6690 Cable): WAN IPv4 178.202.105.29 is public (equals the egress address, not CGNAT); no UPnP port mappings exist yet; the router offers UPnP IGD (`WANIPConnection:2`) and `WANIPv6FirewallControl:1` (IPv6 pinholes). Global IPv6 is SLAAC/EUI-64 on 2a02:908:2616:da20::/64: the interface id is stable, the /64 prefix may change. **The web chat binds `0.0.0.0` only (config `http_address`, default in server_config.dart) so nothing answers on IPv6 yet; `http_address: '::'` would make it dual-stack.**
+
+Provider findings (read from their own pages):
+- **freemyip.com**: availability check works from a program (POST /website subdomain=x3ptzm -> "available"), but the claim step is behind Google reCAPTCHA: a person must claim. x3ptzm.freemyip.com is free. N1 resolved: not fully automatic.
+- **ipq.co / fdns.uk**: form POST /records, no captcha, IPv4+IPv6, free label (x3ptzm.ipq.co). But static: no update API ("once we implement it"), no TXT, "records owned by ipq.co, can be removed at any time". A 2010 hobby project (Rails 3); history of a Safe Browsing flag. Weak for long-term use.
+- **nip.io / sslip.io / backname.io / traefik.me**: IP embedded in the name, nothing to claim, no custom label. IPv6 with dashes. No TXT/wildcard certs, but per-hostname HTTP-01 certs work. White-label needs an own domain (rejected).
+- **afraid.org FreeDNS**: 22,966 shared domains, free label, dynamic update `curl https://v6.sync.afraid.org/u/<token>/` for IPv6, web forwarding. Signup needs name+email+image captcha+activation email (a person, once). TXT only via the web UI, no ACME API found.
+- **Let's Encrypt IP-address certs** (GA 2026-01-15): IPv4/IPv6, must use the `shortlived` profile (~6 days), only http-01 and tls-alpn-01 (no DNS-01). Needs port 80/443 reachable, no name at all.
+- **ACME**: HTTP-01 on port 80 covers any named host. TXT records/DNS-01 are irrelevant to provider choice (only wildcards would need them, and we do not).
+
+## Status 2026-11-05 (later)
+- Server now binds `::` (`/etc/xprs-server/config.yaml`, `http_address: "::"`).
+- The user opened IPv4 port 80 on the FRITZ!Box themselves; `http://178-202-105-29.nip.io/` serves the web chat from outside. The FRITZ!Box has IPv6 pinholes disabled (UPnP `InboundPinholeAllowed=0`) and needs an admin login to change: not available to the agent. The LAN resolver also drops nip.io answers (rebind protection).
+- Next: HTTP-01 ACME client (Let's Encrypt) in the server, then 443.
+
+## Built 2026-11-05
+`core/lib/src/connections/internet/public_name/` (moved to the core so the app
+can serve HTTPS on Android/desktop too), wired in `server/bin/xprs_server.dart`
+behind `public_name`, `https_port`, `upnp`, `acme_email`, `acme_staging`.
+First run on the Pi: IPv6 name unreachable (router), IPv4 name reachable on 80
+and 443, real certificate issued, https://178-202-105-29.nip.io/ live.
+Not done yet: `url:` in the signed announcement; the app's share server as an
+`AcmeWebServer`.

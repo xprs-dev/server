@@ -4,16 +4,21 @@
  * a visitor may read or post lives in WebChatApi (core), which the app's share
  * server uses too.
  *
- * Plain HTTP. On a public address, put TLS in front (deploy/README.md).
+ * Plain HTTP, or HTTPS with [startSecure]. Two transport chores live here
+ * too, no rules of the visitor API: answering ACME HTTP-01 challenges
+ * ([acmeChallenges], for the server's own certificate) and sending a visitor
+ * who came by the public name to HTTPS once there is a certificate
+ * ([redirectHosts]).
  */
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
 import 'package:xprs_core/src/services/log_service.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 
-class WebChatServer {
+class WebChatServer implements AcmeWebServer {
   WebChatServer({required this.api, required Uint8List page})
       : _html = page,
         _gz = Uint8List.fromList(gzip.encode(page));
@@ -28,15 +33,48 @@ class WebChatServer {
 
   int get port => _server?.port ?? 0;
 
-  Future<void> start({required int port, String address = '0.0.0.0'}) async {
-    final s = await HttpServer.bind(address, port, shared: false);
+  // AcmeWebServer (core public_name): the public-name service drives these.
+  @override
+  final Map<String, String> acmeChallenges = {};
+  @override
+  Set<String> redirectHosts = {};
+  @override
+  int httpsPort = 443;
+  @override
+  bool challengesViaHttps = false;
+  bool _tls = false;
+
+  Future<void> start({required int port, String address = '0.0.0.0'}) =>
+      _bind(HttpServer.bind(address, port, shared: false), address);
+
+  /// HTTPS with a PEM certificate chain and private key.
+  @override
+  Future<void> startSecure({
+    required int port,
+    required String address,
+    required List<int> certificateChain,
+    required List<int> privateKey,
+  }) {
+    final ctx = SecurityContext()
+      ..useCertificateChainBytes(certificateChain)
+      ..usePrivateKeyBytes(privateKey);
+    return _bind(HttpServer.bindSecure(address, port, ctx, shared: false),
+        address, tls: true);
+  }
+
+  Future<void> _bind(Future<HttpServer> bind, String address,
+      {bool tls = false}) async {
+    final s = await bind;
+    _tls = tls;
     // A browser that went away leaves a socket behind; do not keep it long.
     s.idleTimeout = const Duration(seconds: 20);
     s.listen(_handle, onError: (_) {});
     _server = s;
-    LogService.instance.add('web chat: serving on $address:${s.port}');
+    LogService.instance
+        .add('web chat: serving ${tls ? 'https' : 'http'} on $address:${s.port}');
   }
 
+  @override
   Future<void> stop() async {
     await _server?.close(force: true);
     _server = null;
@@ -47,7 +85,23 @@ class WebChatServer {
     try {
       final path = req.uri.path;
       final read = req.method == 'GET' || req.method == 'HEAD';
-      if (read && (path == '/' || path == '/index.html')) {
+      const acme = '/.well-known/acme-challenge/';
+      final host = (req.headers.host ?? '').toLowerCase();
+      if (read && path.startsWith(acme)) {
+        final ka = acmeChallenges[path.substring(acme.length)];
+        if (ka != null && challengesViaHttps && !_tls) {
+          await res.redirect(Uri.parse('https://$host${req.uri}'));
+          return;
+        }
+        res.statusCode = ka == null ? HttpStatus.notFound : HttpStatus.ok;
+        res.headers.contentType = ContentType.text;
+        if (ka != null) res.write(ka);
+        await res.close();
+      } else if (read && redirectHosts.contains(host)) {
+        final port = httpsPort == 443 ? '' : ':$httpsPort';
+        await res.redirect(Uri.parse('https://$host$port${req.uri}'),
+            status: HttpStatus.movedPermanently);
+      } else if (read && (path == '/' || path == '/index.html')) {
         await _page(req);
       } else if (path.startsWith('/api/')) {
         await _api(req);

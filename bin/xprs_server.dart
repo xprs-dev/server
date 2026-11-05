@@ -18,10 +18,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:xprs_core/src/services/log_service.dart';
+import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 import 'package:xprs_server/autostart/autostart.dart';
 import 'package:xprs_server/cli/cli.dart';
 import 'package:xprs_server/config/server_config.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
+import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
 import 'package:xprs_server/station.dart';
 import 'package:xprs_server/web/embedded_page.dart';
 
@@ -121,19 +123,10 @@ Future<void> _run(
   };
 
   final home = Platform.environment['HOME'] ?? '.';
-  // The page is inside the program; `page` / --page serves a file instead
-  // (a customised page, or one being developed).
-  final Uint8List pageBytes;
-  if (config.page == null) {
-    pageBytes = embeddedPage();
-  } else {
-    final f = File(config.page!);
-    if (!f.existsSync()) {
-      stderr.writeln('web chat page not found: ${f.path} (page / --page)');
-      exit(2);
-    }
-    pageBytes = await f.readAsBytes();
-  }
+  // The one web chat page, from the webchat repo, compiled into the program
+  // (tool/sync_web_chat.sh). There is no option to serve another: every
+  // station serves the same page (test/web_page_test.dart).
+  final Uint8List pageBytes = embeddedPage();
 
   final station = Station(
     StationConfig(
@@ -146,12 +139,50 @@ Future<void> _run(
   );
   await station.start();
 
-  final web = WebChatServer(api: station.webChatApi(), page: pageBytes);
-  await web.start(port: config.httpPort, address: config.httpAddress);
+  final api = station.webChatApi();
+  final web = WebChatServer(api: api, page: pageBytes);
+  var address = config.httpAddress;
+  try {
+    await web.start(port: config.httpPort, address: address);
+  } on SocketException catch (e) {
+    // "::" on a machine with IPv6 switched off: IPv4 only.
+    if (address != '::') rethrow;
+    LogService.instance.add('web chat: no IPv6 ($e); IPv4 only');
+    address = '0.0.0.0';
+    await web.start(port: config.httpPort, address: address);
+  }
 
   LogService.instance.add('server: ${station.callsign} web chat ready');
   _up = true;
   unawaited(station.startNetwork());
+
+  PublicName? publicName;
+  if (config.publicName) {
+    publicName = PublicName(
+      options: PublicNameOptions(
+        dir: '$home/.local/share/xprs/tls',
+        httpPort: config.httpPort,
+        httpsPort: config.httpsPort,
+        address: address,
+        upnp: config.upnp,
+        staging: config.acmeStaging,
+        email: config.acmeEmail,
+      ),
+      http: web,
+      newServer: () => WebChatServer(api: api, page: pageBytes),
+      log: LogService.instance.add,
+      // The address goes in the station's signed decoration (XPRS.md 6.3.2
+      // url:), so apps find the web chat by callsign. https:// whenever the
+      // internet reaches port 443, http:// only when it reaches just 80.
+      onUrl: XprsPublisher.instance.setPublicUrl,
+    );
+    await publicName.start();
+    final pn = publicName;
+    station.alsoLocal = (peer) {
+      final v4 = pn.publicIPv4;
+      return v4 != null && peer.replaceFirst('::ffff:', '') == v4;
+    };
+  }
 
   final done = Completer<void>();
   for (final sig in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
@@ -161,6 +192,7 @@ Future<void> _run(
   }
   await done.future;
   LogService.instance.add('server: stopping');
+  await publicName?.stop();
   await web.stop();
   await station.stop();
   await log?.close();

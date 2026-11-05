@@ -46,13 +46,12 @@ class Invocation {
 ArgParser buildParser() => ArgParser()
   ..addOption('config', help: 'config file (default: search, see init-config)')
   ..addOption('http-port', help: 'web chat port (default 80)')
-  ..addOption('http-address', help: 'web chat address (default 0.0.0.0)')
+  ..addOption('http-address', help: 'web chat address (default ::, IPv4 and IPv6)')
   ..addOption('rns-port', help: 'Reticulum TCP port (default 4242)')
   ..addMultiOption(
     'hub',
     help: 'uplink host[:port], repeatable (default: the core list)',
   )
-  ..addOption('page', help: 'the built web chat page')
   ..addOption('nickname', help: 'station name (default "XPRS server")')
   ..addOption('data-dir', help: "the server's own HOME (identity, archive)")
   ..addFlag(
@@ -61,6 +60,13 @@ ArgParser buildParser() => ArgParser()
     defaultsTo: null,
   )
   ..addOption('log-file', help: 'also append the log to this file')
+  ..addFlag('public-name',
+      help: 'nip.io name + Let\'s Encrypt HTTPS when reachable (default on)')
+  ..addOption('https-port', help: 'HTTPS port (default 443)')
+  ..addFlag('upnp', help: 'ask the router to open ports 80/443 (default on)')
+  ..addOption('acme-email', help: "Let's Encrypt contact (optional)")
+  ..addFlag('acme-staging',
+      negatable: false, help: "Let's Encrypt staging CA (testing)")
   ..addFlag('system', negatable: false, help: 'service for the whole machine')
   ..addFlag('user', negatable: false, help: 'service for this user only')
   ..addFlag('dry-run', negatable: false, help: 'show what would change')
@@ -104,13 +110,21 @@ Invocation parseInvocation(List<String> argv) {
   if (r.wasParsed('rns-port')) port('rns-port', 'rns_port');
   if (r.wasParsed('http-address')) o['http_address'] = r['http-address'];
   if (r.wasParsed('hub')) o['hubs'] = r['hub'];
-  if (r.wasParsed('page')) o['page'] = r['page'];
   if (r.wasParsed('nickname')) o['nickname'] = r['nickname'];
   if (r.wasParsed('data-dir')) o['data_dir'] = r['data-dir'];
   if (r.wasParsed('public-archiver')) {
     o['public_archiver'] = r['public-archiver'];
   }
   if (r.wasParsed('log-file')) o['log_file'] = r['log-file'];
+  if (r.wasParsed('https-port')) port('https-port', 'https_port');
+  for (final (flag, key) in [
+    ('public-name', 'public_name'),
+    ('upnp', 'upnp'),
+    ('acme-staging', 'acme_staging'),
+  ]) {
+    if (r.wasParsed(flag)) o[key] = r[flag];
+  }
+  if (r.wasParsed('acme-email')) o['acme_email'] = r['acme-email'];
 
   return Invocation(
     command: command,

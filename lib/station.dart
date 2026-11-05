@@ -16,6 +16,7 @@
  */
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:xprs_core/src/platform/core_host.dart';
@@ -58,11 +59,13 @@ class Station {
   Station(this.config);
   final StationConfig config;
   Timer? _hubTick;
+  FileKeyValueStore? _store;
 
   String get callsign => MeshService.instance.tableCallsign;
 
   Future<void> start() async {
     final store = await FileKeyValueStore.open(config.settingsPath);
+    _store = store;
     CoreHost.openPreferences = () async => store;
     // The heartbeat the core's catch-up poll runs on (XPRS.md 12.10.1): the
     // server asks reachable stations and archivers for the history it missed.
@@ -161,7 +164,12 @@ class Station {
 
   /// The visitor API, wired exactly as the app's share server wires it:
   /// posts go in through the one receive door, reads come from the archive.
-  WebChatApi webChatApi() => WebChatApi(
+  WebChatApi webChatApi() {
+    unawaited(_readPrefixes()); // so the first visitor is judged right
+    return _webChatApi();
+  }
+
+  WebChatApi _webChatApi() => WebChatApi(
     publicRows: archivePublicRows,
     held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
     receive: (w) => PacketGateway.instance.receive(
@@ -173,7 +181,46 @@ class Station {
     selfCallsign: () => MeshService.instance.tableCallsign,
     keyOf: (c) => XprsArchive.instance.keyResolver?.call(c),
     appPath: () => null,
+    // The administrator and the visitor settings live with the station's.
+    store: _store,
+    isLocalPeer: isLocalPeer,
   );
+
+  /// The station's own network: private addresses, plus the IPv6 /64s this
+  /// machine has public addresses in (an IPv6 LAN hands out public ones).
+  /// The interface list is read at most once a minute.
+  bool isLocalPeer(String peer) {
+    if (isPrivateAddress(peer)) return true;
+    if (alsoLocal?.call(peer) ?? false) return true;
+    final ip = InternetAddress.tryParse(peer.split('%').first);
+    if (ip == null || ip.type != InternetAddressType.IPv6) return false;
+    if (DateTime.now().difference(_prefixesAt) > const Duration(minutes: 1)) {
+      unawaited(_readPrefixes());
+    }
+    return _prefixes.contains(_prefix64(ip));
+  }
+
+  Future<void> _readPrefixes() async {
+    _prefixesAt = DateTime.now();
+    try {
+      final l = await NetworkInterface.list(type: InternetAddressType.IPv6);
+      _prefixes = {
+        for (final nic in l)
+          for (final a in nic.addresses)
+            if (!a.isLinkLocal && !a.isLoopback) _prefix64(a),
+      };
+    } catch (_) {}
+  }
+
+  /// More of the station's own network, from the host: the public IPv4 a
+  /// device behind this router comes back as when it opens the public name
+  /// (hairpin NAT); only machines behind that NAT share it.
+  bool Function(String peer)? alsoLocal;
+
+  Set<String> _prefixes = {};
+  DateTime _prefixesAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static String _prefix64(InternetAddress a) =>
+      a.rawAddress.sublist(0, 8).join('.');
 
   Future<void> stop() async {
     _hubTick?.cancel();

@@ -12,4 +12,7 @@ mkdir -p "$HERE/web"
 cp "$OUT/chat_page.html" "$HERE/web/chat_page.html"
 rm -rf "$OUT"
 # The compiled server carries the page inside itself (no file beside the binary).
-(cd "$HERE" && dart run tool/embed_page.dart)
+# dart may be off PATH (build queues, services): fall back to the Flutter SDK's.
+DART="$(command -v dart || echo "$HOME/flutter/bin/dart")"
+[ -x "$DART" ] || { echo "dart not found (put it on PATH)" >&2; exit 1; }
+(cd "$HERE" && "$DART" run tool/embed_page.dart)

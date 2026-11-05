@@ -9,6 +9,32 @@ import 'package:xprs_server/web/embedded_page.dart';
 
 void main() {
   group('ServerConfig', () {
+    test('public name options: defaults, file, flags, validation', () {
+      final d = ServerConfig.resolve();
+      expect(d.publicName, isTrue);
+      expect(d.httpsPort, 443);
+      expect(d.upnp, isTrue);
+      expect(d.acmeEmail, isNull);
+      expect(d.acmeStaging, isFalse);
+      expect(d.httpAddress, '::');
+      final c = ServerConfig.resolve(
+        file: {'public_name': false, 'acme_email': 'op@example.org'},
+        cli: parseInvocation(
+                ['--https-port', '8443', '--no-upnp', '--acme-staging'])
+            .overrides,
+      );
+      expect(c.publicName, isFalse);
+      expect(c.acmeEmail, 'op@example.org');
+      expect(c.httpsPort, 8443);
+      expect(c.upnp, isFalse);
+      expect(c.acmeStaging, isTrue);
+      expect(() => ServerConfig.resolve(file: {'acme_email': 'nope'}),
+          throwsA(isA<ConfigException>()));
+      expect(() => ServerConfig.resolve(file: {'https_port': 0}),
+          throwsA(isA<ConfigException>()));
+      expect(defaultConfigYaml(), contains('# public_name: true'));
+    });
+
     test('defaults', () {
       final c = ServerConfig.resolve();
       expect(c.httpPort, 80);
@@ -56,11 +82,18 @@ void main() {
       );
     });
 
+    test('there is no option to serve another page', () {
+      expect(() => ServerConfig.resolve(file: {'page': '/tmp/x.html'}),
+          throwsA(isA<ConfigException>()));
+      expect(() => parseInvocation(['--page', '/tmp/x.html']),
+          throwsA(isA<FormatException>()));
+    });
+
     test('a key left empty is "not set"; one hub string becomes a list', () {
       final c = ServerConfig.resolve(
-        file: {'page': null, 'hubs': 'a.example:4242'},
+        file: {'log_file': null, 'hubs': 'a.example:4242'},
       );
-      expect(c.page, isNull);
+      expect(c.logFile, isNull);
       expect(c.hubs, ['a.example:4242']);
     });
   });
