@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:xprs_core/src/platform/core_host.dart';
+import 'package:xprs_core/src/platform/heartbeat_keep_alive.dart';
 import 'package:xprs_core/src/profile/profile_service.dart';
 import 'package:xprs_core/src/profile/storage_paths.dart';
 import 'package:xprs_core/src/services/log_service.dart';
@@ -32,7 +33,6 @@ import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 
 import 'host/file_key_value_store.dart';
-import 'host/server_keep_alive.dart';
 
 class StationConfig {
   /// Where the settings file lives (the core's tree is under $HOME, see
@@ -62,7 +62,7 @@ class Station {
     CoreHost.openPreferences = () async => store;
     // The heartbeat the core's catch-up poll runs on (XPRS.md 12.10.1): the
     // server asks reachable stations and archivers for the history it missed.
-    CoreHost.keepAlive = ServerKeepAlive();
+    CoreHost.keepAlive = HeartbeatKeepAlive(every: const Duration(seconds: 2));
 
     await initStorageRoot();
     final prefs = await PreferencesService.instance();
