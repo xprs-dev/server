@@ -1,197 +1,121 @@
 # Plan: reaching an XPRS server from the internet, with nobody touching the router
 
-Status: plan, nothing built. Decisions **(N1)…(N6)** are open, listed at the end.
+Status: plan, nothing built. Decisions **(N1)…(N4)** are open, listed at the end.
+Revised 2026-11-05: existing public services, not infrastructure of our own.
 
 ## 1. The goal
 
-Someone types `https://x3qhn4.xprs.link` (or follows it from a QR code) and gets
-this server's web chat, from any network. The operator does nothing beyond
-installing the server: no port forwarding, no dynamic-DNS account, no
-certificate work. The same mechanism serves every XPRS server, so it is run
-by the servers themselves, not by a person per server.
+Someone opens `https://2a02-908-2616-da20-…-d505.nip.io` (or scans it from a
+QR code) and gets this server's web chat, from any network. The operator
+does nothing beyond installing the server: no port forwarding, no DNS
+account, no certificate work. No name service, domain or relay that XPRS has
+to run.
 
-## 2. What the network here actually allows (measured 2026-11-05)
+## 2. The pieces that already exist
 
-| | Finding | Meaning |
+| Need | Service | What it costs us |
 |---|---|---|
-| IPv6 | global `2a02:908:2616:da20::/64` (Vodafone cable), SLAAC, EUI-64 plus temporary addresses | every server has its own public address; there is no NAT on IPv6, only the router's firewall |
-| IPv4 | router WAN `178.202.105.29`, public (not DS-Lite/CGNAT) | port mapping is possible here, but on many cable/fibre lines it is not (CGNAT): IPv4 can never be the plan |
-| Router | AVM FRITZ!Box 6690 Cable, advertises UPnP IGDv2 incl. `WANIPv6FirewallControl:1` (and PCP) | a device can open its own IPv6 pinhole **if** the per-device switch "permit independent port sharing" is on. It is off by default |
-| Prefix | a cable /64 is renumbered by the ISP from time to time | any published address must be refreshed automatically |
+| **A name for an IPv6 address** | [nip.io](https://nip.io/) (sslip.io is the same service and now redirects to it): a wildcard DNS that computes the answer from the name. IPv6 is written with dashes: `2a01-4f8-c17-b8f--2.nip.io` → `2a01:4f8:c17:b8f::2` | nothing: no account, no registration, nothing stored. The server just builds the name from its own address |
+| **A certificate for that name** | Let's Encrypt, HTTP-01 or TLS-ALPN-01, for the single hostname (nip.io supports this; it has no wildcard) | an ACME client in the server. nip.io names share one Let's Encrypt quota, which LE has raised to 250,000 over the years; sslip.io is the documented second domain if nip.io's runs out |
+| **A certificate with no name at all** | Let's Encrypt **IP address certificates**, generally available since January 2026, IPv4 and IPv6, always short-lived (about 6 days), HTTP-01 or TLS-ALPN-01 only | the same ACME client with the `shortlived` profile, renewing every few days. Then `https://[2a02:908:…]/` works with no DNS involved |
+| **Proof the server is reachable** | the Let's Encrypt validation itself: LE connects to the name from outside. A certificate issued means the internet can reach this server | nothing extra: the first issuance IS the reachability test |
 
-So: IPv6 is the natural address, the router's firewall is the only obstacle,
-and the router can be asked to open it, but on most routers only after one
-click the operator has not made. A design that needs that click fails the
-goal. Hence a ladder that ends in a path needing nothing.
+## 3. What these do NOT solve: the router's firewall
 
-## 3. The reachability ladder
+A name only tells a browser where to go. IPv6 has no NAT, but the router
+still drops inbound connections unless a hole is open, and Let's Encrypt
+must get in too. This network (measured: Vodafone cable, AVM FRITZ!Box 6690):
 
-The server tries each rung at start and every time its address changes, keeps
-the best that works, and says which one it is on (`/api/status`, the log):
+- the server has a public, global IPv6 address;
+- the FRITZ!Box offers UPnP IGDv2 `WANIPv6FirewallControl` (and PCP), so the
+  server can open its own pinhole for 443 automatically, but **only if the
+  device's "permit independent port sharing" switch is on, which it is not by
+  default**;
+- some ISPs' routers do not firewall inbound IPv6 at all, so there it simply
+  works.
 
-| Rung | How | Needs from the router | Who it reaches |
+So direct reachability is automatic where the router allows it, and needs that
+one switch on a default FRITZ!Box. For the case where nothing can be opened,
+there are two fallbacks (**N1**):
+
+| Fallback | How | For | Against |
 |---|---|---|---|
-| **A. Direct IPv6** | listen on `[::]:443`; some ISPs/routers do not firewall inbound IPv6 at all | nothing | IPv6 visitors |
-| **B. IPv6 pinhole** | UPnP IGDv2 `AddPinhole` (443, 4242) with a lease, renewed; PCP (RFC 6887) `MAP` as the second protocol | the per-device "allow apps to open ports" switch (FRITZ!Box), or a router that allows it by default | IPv6 visitors |
-| **C. IPv4 mapping** | UPnP IGD `AddPortMapping` / NAT-PMP / PCP, only when the WAN IPv4 is public | the same switch | IPv4 visitors |
-| **D. Relay over Reticulum** | the server is fronted by another XPRS server that IS reachable, over the outbound Reticulum link it already holds | **nothing**: outbound only | everybody |
+| **Cloudflare Quick Tunnel** | `cloudflared tunnel --url http://localhost:80`: no account; the server dials out and gets a random `https://<words>.trycloudflare.com` with a valid certificate | nothing to build or run; works behind any NAT, IPv4 and IPv6 | Cloudflare calls it testing-only, with no uptime guarantee; about 200 requests in flight; a new random name on every restart; Cloudflare terminates TLS and sees the traffic; a non-Dart binary to ship |
+| **An XPRS server as relay** | a reachable XPRS server fronts the others over the Reticulum link they already hold outbound | ours, no third party; stable | has to be built (the biggest piece of work here), and somebody has to run reachable relays |
 
-A, B and C are tried, never required. D is what makes the goal true: every
-server already keeps outbound links to the hubs, so every server can always
-be fronted.
+## 4. How the server does it, start to finish
 
-**Knowing a rung works needs somebody outside.** A server cannot test its own
-inbound reachability from inside. It asks a peer (the name service, or a relay)
-to connect back to `[addr]:443` and answer with a signed result. Only a probed
-address is ever published as direct (section 4); until then the name points at
-a relay.
+1. **Address.** List global IPv6 addresses; choose a stable one (an RFC 7217
+   stable-privacy address, not the EUI-64 one, which carries the network
+   card's MAC into every link and QR code). Build the name:
+   `2a02-908-2616-da20-xxxx-xxxx-xxxx-xxxx.nip.io`.
+2. **Open the door.** Ask the router for a pinhole on 443 (and 80 for the
+   redirect) by UPnP IGDv2 `AddPinhole`, then PCP; leased for a few hours and
+   renewed, so a stopped server closes its own hole. Refused or no router
+   answering: carry on, step 3 will tell.
+3. **Certificate.** ACME HTTP-01 / TLS-ALPN-01 for the nip.io name (90 days),
+   or an IP certificate (6 days) (**N2**). Success means reachable: serve
+   HTTPS on 443 and redirect 80 to it. Failure means not reachable from
+   outside: use the fallback (N1), and log one plain line saying why, for
+   example "router refused the IPv6 pinhole: turn on 'permit independent port
+   sharing' for this device, or the server stays on the relay".
+4. **Renumbering.** Cable providers change the /64 prefix now and then. The
+   server watches its addresses; a new one means a new name, a new pinhole and
+   a new certificate (minutes). Old links stop working, which is why the
+   stable way to find a server is its callsign (step 5).
+5. **Say where it is.** The server puts its current URL in its signed
+   announcement (`url:`, a field XPRS.md already uses to name a source) and
+   re-airs it whenever it changes. XPRS apps that know the callsign always
+   reach the current address; the webchat page and the app show the link and
+   QR code.
 
-IPv4-only visitors (still a large share of mobile networks) reach an
-IPv6-only server through a relay, or through rung C where it exists. A relay
-with both families fixes that for everybody.
+## 5. Limits to know
 
-## 4. Names
+- **IPv4-only visitors cannot reach an IPv6 address.** Most mobile and home
+  networks in Germany are dual-stack now, but not all, and many abroad are not.
+  Where the WAN IPv4 is public (it is here: `178.202.105.29`), UPnP/PCP can map
+  443 on IPv4 too, and nip.io names IPv4 the same way; behind carrier NAT only
+  the fallback reaches them.
+- **The name follows the address.** A nip.io link breaks when the prefix
+  changes. A name that survives renumbering needs a dynamic DNS account
+  ([deSEC](https://desec.io)'s free `dedyn.io`, IPv6 and DNS-01 included), a
+  one-time sign-up by the operator: offered as an option (**N3**), never
+  required.
+- **nip.io and Let's Encrypt are third parties.** Both are long-running and
+  free; neither promises anything. The server must keep working on the LAN and
+  over Reticulum when either is down; the internet page is an addition.
 
-### 4.1 The callsign name (recommended primary)
+## 6. Phases
 
-`x3qhn4.xprs.link`: the station's own callsign, lower-cased.
+1. **Reachability report.** Addresses, the nip.io name, UPnP/PCP pinhole and
+   IPv4 mapping attempts, reported in the log and `/api/status`. Testable here
+   today against the FRITZ!Box.
+2. **HTTPS.** An ACME client in Dart (HTTP-01 and TLS-ALPN-01), certificates in
+   the data directory, renewal, 443 plus the 80 redirect, the staging endpoint
+   in tests (a crash-looping server must not burn the shared nip.io quota).
+3. **Announce the URL** (`url:` on the signed announcement) and show it in the
+   webchat page and the app, with a QR code.
+4. **Fallback** per N1.
 
-The callsign is self-certifying: it is derived from the station's key
-(XPRS.md section 3), so **whoever can sign with that key owns that name**, and no
-account, password or token is needed. The name service is a small
-authoritative DNS server that accepts only signed updates:
+## 7. Decisions for you
 
-```
-t:service f:X3QHN4 serve:web url:https://x3qhn4.xprs.link/ ip6:2a02:908:2616:da20::d505 via:direct ts:... k:npub1... sig:...
-```
+- **N1** When the router cannot be opened: Cloudflare Quick Tunnel (quick to
+  add, but third-party, testing-only and a random name per restart), an XPRS
+  relay (ours, but to be built and run), or neither for now (the server is
+  reachable on LAN and Reticulum only).
+- **N2** Certificate: the nip.io hostname (recommended: 90-day certificates,
+  a name a person can paste), or the bare IP-address certificate (no DNS
+  dependency at all, renewed every few days, `https://[v6]/` in the bar).
+- **N3** Offer a deSEC `dedyn.io` name as an optional stable address for
+  operators willing to sign up once, or not.
+- **N4** Open the router automatically by UPnP/PCP when it allows it
+  (recommended), or never touch the router, even when it would allow it.
 
-It checks that the signature verifies with `k:` and that `X3QHN4` derives from
-`k:`, probes the address (section 3), and then answers `AAAA` for the name (or
-the relay's addresses, rung D). The update can arrive over HTTP **or simply be
-heard over Reticulum**: the name service is itself an XPRS station following
-these announcements, so a server needs no extra protocol to publish. A
-renumbered prefix is just the next signed announcement.
+## Sources
 
-The name is stable for the life of the key, carries no address, and is the
-same name whichever rung the server is on.
-
-### 4.2 The IPv6-in-the-name form (optional, stateless)
-
-`2a02-908-2616-da20-2ecf-67ff-fe14-d505.ip6.xprs.link`, the sslip.io pattern:
-the DNS server computes the `AAAA` from the label and stores nothing.
-
-| For | Against |
-|---|---|
-| zero state, nothing to register or sign; works the moment the address exists | changes whenever the ISP renumbers the prefix, so links and QR codes break |
-| useful for debugging and for LAN-only sharing | publishes the address (and, with an EUI-64 address like this one, the network card's MAC) in every link |
-| | anybody can mint a name for any address, so it proves nothing about which station answers |
-| | useless on rung D, where the visitor must reach the relay, not the address |
-
-So: serve it, because it costs nothing and the user asked for it, but put the
-callsign name on the page, the QR code and the announcements. The server
-listens on a stable privacy address (RFC 7217) rather than the EUI-64 one, so
-neither name leaks the MAC.
-
-### 4.3 The zone
-
-A separate registered domain for this (here `xprs.link`, **N1**), not a
-subdomain of the project site, for two reasons:
-
-- it goes on the **Public Suffix List**, so each server's name is its own site
-  to the browser (no shared cookies or storage between strangers' servers) and
-  Let's Encrypt counts certificates per server name rather than 50 a week for
-  the whole zone;
-- abuse of one server's page cannot get the project's own domain blocklisted.
-
-## 5. TLS
-
-The page works over plain HTTP (the webchat's own crypto is pure JS, written
-for captive portals with no `crypto.subtle`), but browsers mark `http://`
-"not secure", some refuse to open it from a link, and the API would cross the
-internet in the clear. So HTTPS on every rung:
-
-- **Direct (A–C):** the server gets its own Let's Encrypt certificate for
-  `x3qhn4.xprs.link` by **ACME DNS-01**: it asks the name service, with a
-  signed packet, to publish the `_acme-challenge` TXT for ITS name only. No
-  inbound port 80 is needed for issuance, and the key never leaves the server.
-  Renewal is automatic.
-- **Relay (D):** the relay passes TLS through by SNI, and the home server
-  terminates it with the same certificate. The relay carries bytes it cannot
-  read (**N3** has the simpler alternative).
-
-## 6. The relay (rung D)
-
-Any XPRS server that passes the reachability probe can offer to front others,
-announced on the existing vocabulary: `serve:relay,web` (the spec already has
-`serve:relay`; `web` is new, **N4**).
-
-- **The tunnel:** the home server opens a Reticulum link to the relay
-  (reticulum-dart's link/channel), outbound, through hubs it already reaches.
-  A visitor connects to the relay on 443; the relay reads the SNI
-  (`x3qhn4.xprs.link`), finds the link that callsign registered with a signed
-  request, and copies the TLS stream both ways.
-- **Choosing a relay:** automatic. Prefer one with both IPv4 and IPv6, low
-  path cost, spare quota; keep two (the name service publishes both); move
-  when one stops answering.
-- **Budget:** the web chat is small (the page is 35 kB gzipped, the API is
-  short JSON), so a relay serves many homes. Quotas per home server (bytes,
-  concurrent visitors) are announced by the relay, and enforced.
-- **Trust:** with SNI passthrough the relay sees which name was asked for and
-  how many bytes moved, nothing more. Even with N3's terminating relay, what it
-  would see is public chat and sealed DMs (sealed in the browser), never a key.
-
-## 7. Exposure
-
-Putting the server on the internet changes who can call it:
-
-- the visitor API is already written for hostile callers (an allowlist of reads
-  and one signed write, per-visitor limits, `WebChatApi`); it stays the only
-  thing on 443;
-- the admin API stays loopback-only; nothing administrative is opened;
-- TCP 4242 (Reticulum transport) is opened only when the operator wants a
-  public hub (**N5**); it then needs connection caps and per-source limits,
-  which phase 3 of `plan-server.md` already lists;
-- pinholes and mappings are leased (a few hours) and renewed, so a stopped
-  server closes its own holes.
-
-## 8. Phases
-
-1. **Reachability report.** The server learns its global IPv6 addresses
-   (preferring a stable privacy address), tries UPnP IGDv2/PCP pinholes and
-   IPv4 mapping, and reports what it got. No names yet. Testable here today
-   (the FRITZ!Box answers; the switch decides).
-2. **Name service.** A small authoritative DNS server (Dart, in this repo or
-   its own), the signed `t:service serve:web` update over HTTP and over
-   Reticulum, the connect-back probe, the `ip6.` stateless zone, ACME DNS-01
-   TXT on signed request. Run at least two, in different places.
-3. **HTTPS on the server.** ACME client (DNS-01 through the name service),
-   certificates stored in the data directory, `:443` with HTTP→HTTPS redirect
-   on `:80`.
-4. **Relay.** `serve:relay,web`, the SNI-passthrough tunnel over a Reticulum
-   link, automatic choice and failover, quotas.
-5. **Show it.** The webchat page and the app show the station's public link
-   and QR code; the server logs which rung it is on.
-
-Phases 1 and 3 help any server with a reachable IPv6 address; phase 2 is what
-the rest stands on; phase 4 is what makes "no router changes" true for
-everybody.
-
-## 9. Decisions for you
-
-- **N1** The zone. A new registered domain kept for this (recommended,
-  e.g. `xprs.link`), or a subdomain of the project's own domain. Either way
-  someone has to register it and submit it to the Public Suffix List (the PSL
-  submission takes weeks, so it should start early).
-- **N2** Who runs the name service. The project runs two instances
-  (recommended to start), and anyone can run their own for their own zone with
-  the same code.
-- **N3** Relay TLS. SNI passthrough, where the relay cannot read the traffic
-  (recommended), or a relay that terminates TLS with a wildcard certificate:
-  simpler, but the relay then reads the page and API.
-- **N4** Spec words. `serve:web` and `url:` on `t:service`, and the
-  `ip6:`/`via:` fields of the name update, go into XPRS.md first, since the spec
-  is canonical.
-- **N5** Opening TCP 4242 publicly, so the server is a public Reticulum hub,
-  or keeping it to outbound links (recommended at first).
-- **N6** The IPv6-in-the-name zone: served as a convenience (recommended), or
-  left out to keep a single way of naming a server.
+- nip.io / sslip.io: https://nip.io/
+- Let's Encrypt, short-lived and IP address certificates GA:
+  https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability
+- Cloudflare Quick Tunnels:
+  https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
+- deSEC dynDNS: https://desec.readthedocs.io/en/latest/dyndns/configure.html
