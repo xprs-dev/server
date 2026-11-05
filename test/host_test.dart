@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:xprs_server/host/file_key_value_store.dart';
+import 'package:xprs_server/host/server_keep_alive.dart';
 import 'package:xprs_server/station.dart';
 
 void main() {
@@ -48,6 +49,20 @@ void main() {
     final s = await FileKeyValueStore.open(path);
     expect(s.getKeys(), isEmpty);
     expect(File('$path.damaged').existsSync(), isTrue);
+  });
+
+  test('the heartbeat ticks while listened to, and stops after', () async {
+    final k = ServerKeepAlive(every: const Duration(milliseconds: 10));
+    expect(k.ticks, isTrue);
+    var n = 0;
+    void l() => n++;
+    k.addTickListener(l);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(n, greaterThan(2));
+    k.removeTickListener(l);
+    final at = n;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(n, at);
   });
 
   test('hub entries', () {

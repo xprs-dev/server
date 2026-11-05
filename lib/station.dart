@@ -3,8 +3,9 @@
  * boot uses (lib/main.dart, PermissionGate.startGatedServices,
  * rns_autostart.dart), minus everything that is a wapp, a widget or a radio.
  *
- *   1. CoreHost: the server's answers (a JSON settings file; everything else
- *      keeps its headless default — no keychain, no battery, no BLE).
+ *   1. CoreHost: the server's answers (a JSON settings file, a heartbeat
+ *      for the catch-up poll; everything else keeps its headless default —
+ *      no keychain, no battery, no BLE).
  *   2. Storage root and profile: this station's OWN identity (an X3, a fixed
  *      station), made on first run, never the operator's phone profile.
  *   3. The mesh core (archive, custody, the XPRS LAN bearer, the bridge).
@@ -31,6 +32,7 @@ import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 
 import 'host/file_key_value_store.dart';
+import 'host/server_keep_alive.dart';
 
 class StationConfig {
   /// Where the settings file lives (the core's tree is under $HOME, see
@@ -58,6 +60,9 @@ class Station {
   Future<void> start() async {
     final store = await FileKeyValueStore.open(config.settingsPath);
     CoreHost.openPreferences = () async => store;
+    // The heartbeat the core's catch-up poll runs on (XPRS.md 12.10.1): the
+    // server asks reachable stations and archivers for the history it missed.
+    CoreHost.keepAlive = ServerKeepAlive();
 
     await initStorageRoot();
     final prefs = await PreferencesService.instance();
