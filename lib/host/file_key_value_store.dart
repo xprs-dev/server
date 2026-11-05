@@ -4,21 +4,20 @@
  * Loaded once when opened (reads are synchronous, as the interface wants).
  * A write replaces the file atomically (write a sibling, then rename), so a
  * power cut leaves the old settings or the new ones, never half a file.
- * Writes that land together are coalesced into one: the core sets several
- * keys in a row at start.
+ * Writes run one at a time, and changes that land while one runs are folded
+ * into the next: the core sets several keys in a row at start.
  */
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:xprs_core/src/platform/key_value_store.dart';
+import 'package:xprs_core/src/services/log_service.dart';
 
 class FileKeyValueStore implements KeyValueStore {
   FileKeyValueStore._(this.file, this._values);
 
   final File file;
   final Map<String, Object> _values;
-  Future<void>? _pending;
 
   /// Open (or create) the store at [path].
   static Future<FileKeyValueStore> open(String path) async {
@@ -94,13 +93,38 @@ class FileKeyValueStore implements KeyValueStore {
     return true;
   }
 
-  /// One write for every change made in the same turn of the event loop.
-  Future<void> _flush() => _pending ??= Future(() async {
-        _pending = null;
-        final tmp = File('${file.path}.tmp');
-        await tmp.writeAsString(
-            const JsonEncoder.withIndent('  ').convert(_values),
-            flush: true);
-        await tmp.rename(file.path);
-      });
+  /// Writes run one at a time: a change made while a write is in progress
+  /// marks the store dirty and the running writer goes round once more, so
+  /// every caller's await ends after a write that includes its change. Two
+  /// writers at once raced on the temp file (the second rename found it gone).
+  bool _dirty = false;
+  Future<void>? _writing;
+
+  Future<void> _flush() {
+    _dirty = true;
+    return _writing ??= _drain();
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (_dirty) {
+        // Let the rest of this event-loop turn's changes join this write.
+        await Future<void>.delayed(Duration.zero);
+        _dirty = false;
+        try {
+          final tmp = File('${file.path}.tmp');
+          await tmp.writeAsString(
+              const JsonEncoder.withIndent('  ').convert(_values),
+              flush: true);
+          await tmp.rename(file.path);
+        } catch (e) {
+          // A full disk must not take the station down; the values are still
+          // in memory and the next change tries again.
+          LogService.instance.add('settings: write failed: $e');
+        }
+      }
+    } finally {
+      _writing = null;
+    }
+  }
 }

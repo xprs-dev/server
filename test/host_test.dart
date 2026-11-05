@@ -27,6 +27,21 @@ void main() {
     expect(File('$path.tmp').existsSync(), isFalse);
   });
 
+  test('writes that overlap all land, none races another', () async {
+    final path = '${dir.path}/s.json';
+    final a = await FileKeyValueStore.open(path);
+    final futures = <Future<bool>>[];
+    for (var i = 0; i < 50; i++) {
+      futures.add(a.setInt('k$i', i));
+      if (i % 7 == 0) await Future<void>.delayed(Duration.zero);
+    }
+    await Future.wait(futures);
+    final b = await FileKeyValueStore.open(path);
+    for (var i = 0; i < 50; i++) {
+      expect(b.getInt('k$i'), i);
+    }
+  });
+
   test('a damaged file is kept aside and the store starts empty', () async {
     final path = '${dir.path}/s.json';
     File(path).writeAsStringSync('{not json');

@@ -17,7 +17,20 @@ import 'package:xprs_core/src/services/log_service.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
 import 'package:xprs_server/station.dart';
 
+/// A station runs unattended: an error nobody awaited is logged, not fatal.
+/// A failure before the station is up still ends the process (exit 1), so a
+/// supervisor sees it and restarts.
+bool _up = false;
+
 Future<void> main(List<String> argv) async {
+  await runZonedGuarded(() => _main(argv), (e, st) {
+    LogService.instance.add('server: uncaught $e');
+    stderr.writeln(st);
+    if (!_up) exit(1);
+  });
+}
+
+Future<void> _main(List<String> argv) async {
   final parser = ArgParser()
     ..addOption('http-port', defaultsTo: '80', help: 'web chat port')
     ..addOption('http-address', defaultsTo: '0.0.0.0')
@@ -58,6 +71,7 @@ Future<void> main(List<String> argv) async {
       address: args['http-address'] as String);
 
   LogService.instance.add('server: ${station.callsign} web chat ready');
+  _up = true;
   unawaited(station.startNetwork());
 
   final done = Completer<void>();

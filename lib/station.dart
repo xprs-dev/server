@@ -101,6 +101,23 @@ class Station {
 
   Future<void> _startRns() async {
     final rns = RnsService.instance;
+    // The node's files, where the app keeps them (rns_autostart.dart): above
+    // all the identity, which peers learn paths by and must survive a restart.
+    final ws = wappsDataStorage(PreferencesService.instanceSync!);
+    rns
+      ..identityPath = ws.getAbsolutePath('rns_identity.key')
+      ..relayStorePath = ws.getAbsolutePath('social.sqlite3')
+      ..callPeersPath = ws.getAbsolutePath('call_peers.json')
+      ..partialStoreDir = ws.getAbsolutePath('partials')
+      ..folderStorePath = ws.getAbsolutePath('folders.json')
+      ..diskFoldersPath = ws.getAbsolutePath('disk_folders.json')
+      ..subscriptionsPath = ws.getAbsolutePath('folder_subscriptions.json')
+      ..folderExportDir = ws.getAbsolutePath('opened')
+      ..serveStatsPath = ws.getAbsolutePath('serve_stats.sqlite3')
+      ..popularityPath = ws.getAbsolutePath('folder_popularity.sqlite3')
+      ..followsPath = ws.getAbsolutePath('host_follows.json')
+      ..diskIndexPath = ws.getAbsolutePath('disk_index.sqlite3')
+      ..observedStorePath = ws.getAbsolutePath('observed.sqlite3');
     final name = callsign.isNotEmpty ? callsign : 'xprs';
     // A server always accepts clients: tcpserver mode makes it a transport
     // node for whoever dials in (and speaks XPRS text on the same port).
