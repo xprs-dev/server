@@ -42,11 +42,15 @@ class StationConfig {
   final List<String>? hubs; // null: the core's default list
   final String nickname;
 
+  /// Keep public history for others (XPRS.md 12.9.4).
+  final bool publicArchiver;
+
   const StationConfig({
     required this.settingsPath,
     this.rnsPort = 4242,
     this.hubs,
     this.nickname = 'XPRS server',
+    this.publicArchiver = true,
   });
 }
 
@@ -70,17 +74,14 @@ class Station {
     await _ensureIdentity();
     if (config.hubs != null) prefs.rnsBootstrapServers = config.hubs!;
 
-    // An always-on, mains-powered station: a public archiver that keeps
-    // history for others (XPRS.md 12.9.4), unless the operator said otherwise.
-    if (!store.containsKey('xprs.public')) {
-      await store.setBool('xprs.public', true);
-      await prefs.setXprsAlwaysOn(true);
-    }
+    // An always-on, mains-powered station is a public archiver that keeps
+    // history for others (XPRS.md 12.9.4) unless the config says otherwise.
+    await store.setBool('xprs.public', config.publicArchiver);
+    await prefs.setXprsAlwaysOn(config.publicArchiver);
 
     xprsBindWireCallsign();
     await MeshService.instance.start(canAdvertise: false);
     LogService.instance.add('server: mesh core up as $callsign');
-
   }
 
   /// Reticulum and the hub uplinks. Separate from [start] because dialling
@@ -96,8 +97,11 @@ class Station {
     if (ProfileService.instance.activeProfile != null) return;
     final svc = ProfileService.instance;
     final seed = svc.generatePreview();
-    final profile = svc.buildFromNsec(seed.nsec,
-        nickname: config.nickname, kind: CallsignKind.station);
+    final profile = svc.buildFromNsec(
+      seed.nsec,
+      nickname: config.nickname,
+      kind: CallsignKind.station,
+    );
     // No keychain on a server: the profile is protected by the data
     // directory's permissions (0700, a dedicated user), not a device key.
     await svc.saveAndActivate(profile, encrypt: false);
@@ -127,10 +131,15 @@ class Station {
     // A server always accepts clients: tcpserver mode makes it a transport
     // node for whoever dials in (and speaks XPRS text on the same port).
     final ok = await rns.start(
-        mode: 'tcpserver', port: config.rnsPort, announceName: name);
-    LogService.instance.add(ok
-        ? 'server: Reticulum transport on tcp :${config.rnsPort}'
-        : 'server: Reticulum did not start');
+      mode: 'tcpserver',
+      port: config.rnsPort,
+      announceName: name,
+    );
+    LogService.instance.add(
+      ok
+          ? 'server: Reticulum transport on tcp :${config.rnsPort}'
+          : 'server: Reticulum did not start',
+    );
     await _topUpHubs();
   }
 
@@ -153,17 +162,18 @@ class Station {
   /// The visitor API, wired exactly as the app's share server wires it:
   /// posts go in through the one receive door, reads come from the archive.
   WebChatApi webChatApi() => WebChatApi(
-        publicRows: archivePublicRows,
-        held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
-        receive: (w) => PacketGateway.instance.receive(
-            Uint8List.fromList(utf8.encode(w)),
-            bearer: 'wifi',
-            lane: RxLane.datagram),
-        mayAir: XprsPublisher.instance.mayAir,
-        selfCallsign: () => MeshService.instance.tableCallsign,
-        keyOf: (c) => XprsArchive.instance.keyResolver?.call(c),
-        appPath: () => null,
-      );
+    publicRows: archivePublicRows,
+    held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
+    receive: (w) => PacketGateway.instance.receive(
+      Uint8List.fromList(utf8.encode(w)),
+      bearer: 'wifi',
+      lane: RxLane.datagram,
+    ),
+    mayAir: XprsPublisher.instance.mayAir,
+    selfCallsign: () => MeshService.instance.tableCallsign,
+    keyOf: (c) => XprsArchive.instance.keyResolver?.call(c),
+    appPath: () => null,
+  );
 
   Future<void> stop() async {
     _hubTick?.cancel();

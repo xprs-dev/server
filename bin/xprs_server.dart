@@ -1,74 +1,153 @@
 /*
  * xprs-server: the XPRS server edition.
  *
- *   xprs-server [--http-port 80] [--rns-port 4242] [--hub host:port ...]
- *               [--page web/chat_page.html]
+ *   xprs-server [command] [options]       (xprs-server --help)
+ *
+ * Commands: run (default), init-config, print-config, install-service,
+ * uninstall-service, service-status. Options come from the command line, a
+ * YAML config file and built-in defaults, in that order (lib/config).
  *
  * The core keeps its files under $HOME/.local/share/xprs (storage_paths.dart),
- * so the server runs with HOME set to its own data directory (the systemd
- * unit does this): its identity and archive never mix with an operator's
- * phone or desktop profile on the same machine.
+ * so the server runs with HOME set to its own data directory (the service
+ * unit does this, or `data_dir` / --data-dir makes the server restart itself
+ * that way): its identity and archive never mix with an operator's phone or
+ * desktop profile on the same machine.
  */
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:args/args.dart';
 import 'package:xprs_core/src/services/log_service.dart';
+import 'package:xprs_server/autostart/autostart.dart';
+import 'package:xprs_server/cli/cli.dart';
+import 'package:xprs_server/config/server_config.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
 import 'package:xprs_server/station.dart';
+import 'package:xprs_server/web/embedded_page.dart';
 
 /// A station runs unattended: an error nobody awaited is logged, not fatal.
 /// A failure before the station is up still ends the process (exit 1), so a
 /// supervisor sees it and restarts.
 bool _up = false;
 
+/// Set in the child when the server re-launched itself with a new HOME.
+const _childMark = 'XPRS_SERVER_CHILD';
+
 Future<void> main(List<String> argv) async {
-  await runZonedGuarded(() => _main(argv), (e, st) {
-    LogService.instance.add('server: uncaught $e');
-    stderr.writeln(st);
-    if (!_up) exit(1);
-  });
+  await runZonedGuarded(
+    () async {
+      // Mistakes by the person at the keyboard get a one-line message, not a
+      // stack trace; only a real bug reaches the zone handler below.
+      try {
+        await _main(argv);
+      } on ConfigException catch (e) {
+        stderr.writeln('xprs-server: $e');
+        exit(2);
+      } on ServiceException catch (e) {
+        stderr.writeln('xprs-server: $e');
+        exit(1);
+      }
+    },
+    (e, st) {
+      LogService.instance.add('server: uncaught $e');
+      stderr.writeln(st);
+      if (!_up) exit(1);
+    },
+  );
 }
 
 Future<void> _main(List<String> argv) async {
-  final parser = ArgParser()
-    ..addOption('http-port', defaultsTo: '80', help: 'web chat port')
-    ..addOption('http-address', defaultsTo: '0.0.0.0')
-    ..addOption('rns-port', defaultsTo: '4242', help: 'Reticulum TCP port')
-    ..addMultiOption('hub', help: 'uplink host:port (default: the core list)')
-    ..addOption('page', help: 'the built web chat page')
-    ..addOption('nickname', defaultsTo: 'XPRS server')
-    ..addFlag('help', abbr: 'h', negatable: false);
-  final args = parser.parse(argv);
-  if (args['help'] as bool) {
-    stdout.writeln(parser.usage);
+  final Invocation inv;
+  try {
+    inv = parseInvocation(argv);
+  } on FormatException catch (e) {
+    stderr.writeln('xprs-server: ${e.message}\n\n${usage()}');
+    exit(2);
+  }
+  if (inv.help) {
+    stdout.writeln(usage());
     return;
   }
 
-  LogService.instance.onLine = (l) => stdout.writeln(l);
-
-  final home = Platform.environment['HOME'] ?? '.';
-  final page = File(args['page'] as String? ?? _defaultPage());
-  if (!page.existsSync()) {
-    stderr.writeln('web chat page not found: ${page.path} '
-        '(build it with tool/sync_web_chat.sh, or pass --page)');
-    exit(2);
+  switch (inv.command) {
+    case 'init-config':
+      return _initConfig(inv);
+    case 'install-service':
+    case 'uninstall-service':
+    case 'service-status':
+      return _service(inv);
   }
 
-  final hubs = args['hub'] as List<String>;
-  final station = Station(StationConfig(
-    settingsPath: '$home/.local/share/xprs/server_settings.json',
-    rnsPort: int.parse(args['rns-port'] as String),
-    hubs: hubs.isEmpty ? null : hubs,
-    nickname: args['nickname'] as String,
-  ));
+  final configPath = findConfigFile(explicit: inv.configPath);
+  final config = ServerConfig.resolve(
+    file: configPath == null ? const {} : loadConfigFile(configPath),
+    fileName: configPath ?? 'config file',
+    cli: inv.overrides,
+  );
+  if (inv.command == 'print-config') {
+    stdout.writeln(
+      configPath == null
+          ? 'config file: none found (searched ${configSearchPaths().join(', ')})'
+          : 'config file: $configPath',
+    );
+    stdout.writeln(config.describe());
+    return;
+  }
+  await _run(config, argv, configPath);
+}
+
+Future<void> _run(
+  ServerConfig config,
+  List<String> argv,
+  String? configPath,
+) async {
+  // The core reads HOME once. If data_dir names another one, start again as a
+  // child with it (once; the mark stops a loop), passing the resolved config
+  // path because HOME also moves the config search.
+  final dataDir = config.dataDir;
+  if (dataDir != null &&
+      dataDir != Platform.environment['HOME'] &&
+      Platform.environment[_childMark] == null) {
+    await Directory(dataDir).create(recursive: true);
+    exit(await _relaunch(dataDir, argv, configPath));
+  }
+
+  final log = config.logFile == null
+      ? null
+      : File(config.logFile!).openWrite(mode: FileMode.append);
+  LogService.instance.onLine = (l) {
+    stdout.writeln(l);
+    log?.writeln(l);
+  };
+
+  final home = Platform.environment['HOME'] ?? '.';
+  // The page is inside the program; `page` / --page serves a file instead
+  // (a customised page, or one being developed).
+  final Uint8List pageBytes;
+  if (config.page == null) {
+    pageBytes = embeddedPage();
+  } else {
+    final f = File(config.page!);
+    if (!f.existsSync()) {
+      stderr.writeln('web chat page not found: ${f.path} (page / --page)');
+      exit(2);
+    }
+    pageBytes = await f.readAsBytes();
+  }
+
+  final station = Station(
+    StationConfig(
+      settingsPath: '$home/.local/share/xprs/server_settings.json',
+      rnsPort: config.rnsPort,
+      hubs: config.hubs.isEmpty ? null : config.hubs,
+      nickname: config.nickname,
+      publicArchiver: config.publicArchiver,
+    ),
+  );
   await station.start();
 
-  final web = WebChatServer(
-      api: station.webChatApi(), page: await page.readAsBytes());
-  await web.start(
-      port: int.parse(args['http-port'] as String),
-      address: args['http-address'] as String);
+  final web = WebChatServer(api: station.webChatApi(), page: pageBytes);
+  await web.start(port: config.httpPort, address: config.httpAddress);
 
   LogService.instance.add('server: ${station.callsign} web chat ready');
   _up = true;
@@ -84,18 +163,74 @@ Future<void> _main(List<String> argv) async {
   LogService.instance.add('server: stopping');
   await web.stop();
   await station.stop();
+  await log?.close();
   exit(0);
 }
 
-/// web/chat_page.html next to the executable, else in the source tree.
-String _defaultPage() {
-  final exeDir = File(Platform.resolvedExecutable).parent.path;
-  for (final p in [
-    '$exeDir/web/chat_page.html',
-    '$exeDir/../share/xprs-server/chat_page.html',
-    'web/chat_page.html',
-  ]) {
-    if (File(p).existsSync()) return p;
+/// Runs this same program again with HOME=[home]; returns its exit code.
+Future<int> _relaunch(
+  String home,
+  List<String> argv,
+  String? configPath,
+) async {
+  final args = [
+    ...argv,
+    if (configPath != null &&
+        !argv.any((a) => a == '--config' || a.startsWith('--config='))) ...[
+      '--config',
+      File(configPath).absolute.path,
+    ],
+  ];
+  final p = await Process.start(
+    Platform.resolvedExecutable,
+    args,
+    environment: {...Platform.environment, 'HOME': home, _childMark: '1'},
+    mode: ProcessStartMode.inheritStdio,
+  );
+  for (final sig in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+    sig.watch().listen((s) => p.kill(s));
   }
-  return 'web/chat_page.html';
+  return p.exitCode;
+}
+
+Future<void> _initConfig(Invocation inv) async {
+  final target = inv.configPath ?? configSearchPaths().first;
+  final f = File(target);
+  if (f.existsSync() && !inv.force) {
+    throw ConfigException('$target exists; use --force to overwrite it');
+  }
+  if (inv.dryRun) {
+    stdout.writeln('[dry run] would write $target');
+    return;
+  }
+  await f.parent.create(recursive: true);
+  await f.writeAsString(defaultConfigYaml());
+  stdout.writeln('wrote $target');
+}
+
+Future<void> _service(Invocation inv) async {
+  final backend = AutostartBackend.forPlatform();
+  final scope = inv.scope ?? ServiceScope.system;
+  if (inv.command == 'service-status') {
+    exit(await backend.status(scope));
+  }
+  final installing = inv.command == 'install-service';
+  final opts = ServiceOptions(
+    scope: scope,
+    exePath: Platform.resolvedExecutable,
+    configPath: inv.configPath,
+    dryRun: inv.dryRun,
+  );
+  final steps = installing
+      ? await backend.installSteps(opts)
+      : await backend.uninstallSteps(opts);
+  await runSteps(steps, dryRun: inv.dryRun);
+  if (!inv.dryRun) {
+    stdout.writeln(
+      installing ? 'installed (${backend.name}, ${scope.name}).' : 'removed.',
+    );
+    for (final n in backend.notes(scope, installing: installing)) {
+      stdout.writeln(n);
+    }
+  }
 }

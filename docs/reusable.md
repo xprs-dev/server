@@ -12,3 +12,8 @@ the core; `../core/docs/reusable.md` lists it.
 | `LogService.onLine` | core `services/log_service.dart` | a host that prints the log (console, journal) |
 | `tool/smoke_send.dart` | | signing an XPRS packet with a throwaway key and posting it as a visitor; the pattern for any API smoke test |
 | `HeartbeatKeepAlive` | core `platform/heartbeat_keep_alive.dart` | the core's heartbeat on a host with no native one; the server and the desktop app both use it (2 s) |
+| `ServerConfig` + `loadConfigFile` / `findConfigFile` | `lib/config/server_config.dart` | layered options (default < YAML file < flags) that remember their source, strict on unknown keys. A host with a config file (the desktop app's headless mode, the CLI) can copy the pattern; `defaultConfigYaml` documents every key as comments |
+| `parseInvocation` | `lib/cli/cli.dart` | `command [flags]` where only flags actually typed become overrides (`wasParsed`), so defaults never hide the file's values |
+| `AutostartBackend` / `ServiceStep` / `runSteps` | `lib/autostart/autostart.dart` | boot integration per OS as dry-runnable steps. Nothing in it is server-specific except names: a candidate for core so the desktop app's "start with the computer" can add launchd and Windows backends to the same interface |
+| `SystemdBackend`, `renderUnit` | `lib/autostart/systemd.dart` | a systemd unit (system or user) generated from the binary's own path |
+| `tool/embed_page.dart` + `embeddedPage()` | `tool/`, `lib/web/embedded_page.dart` | shipping a data file inside a `dart compile exe` binary (gzip + base64 in a generated const). Any host that must be a single file |

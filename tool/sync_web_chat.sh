@@ -11,3 +11,5 @@ python3 "$WEB/tool/build.py" --out "$OUT"
 mkdir -p "$HERE/web"
 cp "$OUT/chat_page.html" "$HERE/web/chat_page.html"
 rm -rf "$OUT"
+# The compiled server carries the page inside itself (no file beside the binary).
+(cd "$HERE" && dart run tool/embed_page.dart)

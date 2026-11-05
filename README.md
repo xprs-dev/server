@@ -18,38 +18,100 @@ It has its own identity, an `X3` (fixed station) callsign made on first run,
 never the operator's phone profile. No wapps, no BLE yet (`../xprs/docs/plan-server.md`
 has the phases).
 
-## Build
+## Install
+
+Download `xprs-server` from the [releases](https://github.com/xprs-dev/server/releases),
+make it executable, and start it at boot:
+
+```sh
+chmod +x xprs-server
+sudo ./xprs-server install-service        # system service, web chat on port 80
+```
+
+That is the whole install: the program carries its web page inside itself, so
+there is nothing else to download. It needs `libsqlite3` at run time (Debian:
+`sudo apt install libsqlite3-0`).
+
+**Update:** download the new `xprs-server` and run `sudo ./xprs-server
+install-service` again. It replaces the installed copy and restarts the
+service; your config file and data are kept.
+
+To just try it without installing:
+
+```sh
+./xprs-server --data-dir ~/xprs-data --http-port 8080
+```
+
+## Build from source
 
 Checked out next to `core`, `reticulum-dart` and `webchat`:
 
 ```sh
 dart pub get
-tool/sync_web_chat.sh                       # web/chat_page.html from ../webchat
 dart compile exe bin/xprs_server.dart -o build/xprs-server
 ```
 
-Needs `libsqlite3` at run time (Debian: `libsqlite3-dev` for the unversioned
-`libsqlite3.so` the `sqlite3` package loads).
+The web chat page is built into the program from `lib/web/embedded_page.dart`
+(committed). After the page changes in `webchat`, run `tool/sync_web_chat.sh`
+to rebuild `web/chat_page.html` and that file.
 
 ## Run
 
+The core keeps its tree under `$HOME/.local/share/xprs`, so the server needs
+its own HOME. `--data-dir` (or `data_dir` in the config file) makes the server
+restart itself with that HOME; the service does the same through its unit. The
+same machine's desktop app then keeps its own profile. The log goes to stdout,
+and also to `log_file` if set.
+
+Port 80 without root: use the system service (it has `AmbientCapabilities`),
+or `sudo setcap cap_net_bind_service=+ep xprs-server`.
+
+## Options and the config file
+
+Every option can be a flag or a line in a YAML file. Precedence: **flag >
+config file > built-in default**.
+
+| Config key | Flag | Default | |
+|---|---|---|---|
+| `http_port` | `--http-port` | 80 | web chat port |
+| `http_address` | `--http-address` | 0.0.0.0 | `127.0.0.1` for this machine only |
+| `rns_port` | `--rns-port` | 4242 | Reticulum TCP port |
+| `hubs` | `--hub host[:port]` (repeat) | the core's list | uplinks |
+| `nickname` | `--nickname` | XPRS server | name given to a new identity |
+| `public_archiver` | `--[no-]public-archiver` | on | keep public history for others |
+| `data_dir` | `--data-dir` | HOME as it is | identity, archive, settings |
+| `page` | `--page` | built into the program | an HTML file to serve instead, to customise the page |
+| `log_file` | `--log-file` | stdout only | also append the log here |
+
+The file is found in this order: `--config PATH`, `$XPRS_SERVER_CONFIG`,
+`$XDG_CONFIG_HOME` or `~/.config/xprs-server/config.yaml`,
+`/etc/xprs-server/config.yaml`. No file is fine. An unknown key or a bad value
+stops the server with a clear message (exit 2).
+
 ```sh
-mkdir -p build/web && cp web/chat_page.html build/web/
-HOME=/var/lib/xprs-server build/xprs-server --http-port 80
+xprs-server init-config        # write a commented starting file
+xprs-server print-config       # every option in effect, and where it came from
 ```
 
-The core keeps its tree under `$HOME/.local/share/xprs`, so **set HOME to the
-server's own data directory**; the same machine's desktop app then keeps its
-own profile. Options: `--http-port`, `--http-address`, `--rns-port`,
-`--hub host:port` (repeatable; default the core's hub list), `--page`,
-`--nickname`. The log goes to stdout.
+## Start at boot
 
-Port 80 without root: `sudo setcap cap_net_bind_service=+ep build/xprs-server`,
-or the systemd unit's `AmbientCapabilities`.
+```sh
+sudo ./xprs-server install-service         # system: port 80, user xprs, sandboxed
+./xprs-server install-service --user       # this user only: port 8080, no root
+xprs-server install-service --dry-run       # show what would change, do nothing
+xprs-server service-status [--user]
+xprs-server uninstall-service [--user]      # keeps your config and data
+```
 
-As a service: `sudo deploy/install.sh` installs `/opt/xprs-server`, a system
-user `xprs`, and `deploy/xprs-server.service` (data in `/var/lib/xprs-server`,
-port 80, sandboxed).
+| System | Status |
+|---|---|
+| Linux with systemd | done. `--system`: unit in `/etc/systemd/system`, binary in `/opt/xprs-server`, config `/etc/xprs-server/config.yaml`, data `/var/lib/xprs-server`. `--user`: unit in `~/.config/systemd/user`, runs the binary in place; run `loginctl enable-linger $USER` to start at boot without logging in |
+| Linux without systemd | prints how to run it from your init system |
+| macOS (launchd), Windows | not yet; the same `install-service` command will do it. Prints the manual steps meanwhile |
+
+Installing again updates the binary and restarts the service; your config file
+is never overwritten. After editing the config: `systemctl restart xprs-server`
+(`systemctl --user restart ...` for a user service).
 
 On a public address, put TLS in front (Caddy, nginx); the server trusts
 `X-Forwarded-For` only from loopback.
