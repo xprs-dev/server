@@ -231,6 +231,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 /* Width alone. With the viewport resizing for the keyboard, a phone held
    upright is briefly wider than tall, and an orientation test flipped the
    page into the desktop rail mid-sentence. */
+/* The bar above the conversation on a narrow screen: the room's name, a
+   chevron, and how many people wrote and were not read yet. */
+#roombar{display:none;align-items:center;border-bottom:1px solid var(--border);padding:4px 8px}
+#roombar .rb{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--border);
+   border-radius:999px;color:var(--text);font:inherit;font-size:15px;padding:7px 14px;cursor:pointer;max-width:100%}
+#roombar .rb b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#roombar .rb .chev{color:var(--muted);font-size:11px}
+#roombar .rb .cnt{background:var(--accent);color:var(--on-accent);border-radius:999px;font-size:11px;
+   font-weight:bold;padding:1px 7px}
+#sidebg{display:none}
 @media (max-width:640px){
   /* #chatwrap is the row that holds the rail and the chat column, so it is
    * the one that has to stack. Turning only #content into a column left the
@@ -240,13 +250,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
    * lets it grow to its messages: a long conversation pushed the composer
    * off the bottom of the screen. Zero lets .messages scroll instead. */
   #chatwrap,#chatcol{min-height:0}
-  #side{width:auto;border-right:0;border-bottom:1px solid var(--border);
-        display:flex;overflow-x:auto;overflow-y:hidden;padding:4px 8px;
-        gap:4px;align-items:center}
-  #side .roomhead{display:none}
-  #side .room{padding:5px 10px;border:1px solid var(--border);
-        border-radius:12px;flex-shrink:0}
-  #side .room.on{border-color:var(--accent);border-left-width:1px}
+  /* The room list is a drawer over the page, opened from the bar that names
+   * the room: a hundred private conversations scroll in it like anywhere
+   * else, where a row of chips had no room for ten. */
+  #side{position:fixed;left:0;top:0;bottom:0;width:min(78vw,300px);z-index:30;
+        border-right:1px solid var(--border);background:var(--bg);
+        padding:calc(10px + var(--sat)) 0 calc(10px + var(--sab));
+        transform:translateX(-102%);transition:transform .22s ease;
+        box-shadow:4px 0 24px rgba(0,0,0,.5);overflow-y:auto}
+  #side.open{transform:none}
+  #side .room{padding:11px 16px;font-size:15px}
+  #side .roomhead{padding:12px 16px 4px}
+  #sidebg{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:29;
+        opacity:0;pointer-events:none;transition:opacity .22s}
+  #sidebg.open{opacity:1;pointer-events:auto}
+  #roombar{display:flex}
 }
 .messages{flex:1;overflow-y:auto;padding:12px;display:flex;
         flex-direction:column;gap:8px}
@@ -442,7 +460,10 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
 <div id="content">
   <div id="chatwrap">
   <div id="side"></div>
+  <div id="sidebg" onclick="closeSide()"></div>
   <div id="chatcol">
+    <div id="roombar"><button class="rb" onclick="toggleSide()" aria-label="Choose a room">
+      <b id="rb-name">Local</b><span class="chev">&#9660;</span><span class="cnt" id="rb-cnt" style="display:none"></span></button></div>
     <div class="messages" id="msgs"></div>
     <button id="fab" class="fab hide" onclick="fabClick()" aria-label="New"><svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/></svg></button>
     <div class="status-bar">
@@ -989,9 +1010,13 @@ function themeChips(cur){
 }
 /* One property a line, so the block reads and edits as a list. */
 function prettyCss(css){return css.replace(/;\s*(--[a-z-]+:)/g,';\n  $1').replace(/\{(--[a-z-]+:)/g,'{\n  $1').replace(/;\s*\}/g,';\n}');}
+/* Picking a theme is the choice itself: applied here and saved for every
+ * visitor at once, a hand-written stylesheet replaced. The box below then
+ * shows it, to edit and Save again. */
 function pickTheme(i){
-  var t=THEMES[i];el('ad-css').value=prettyCss(t.css);applyCss(t.css);adminDirty=true;
-  el('themes').innerHTML=themeChips(t.css);
+  var t=THEMES[i],css=prettyCss(t.css);el('ad-css').value=css;adminDirty=false;
+  adminSet({page_css:css});
+  el('themes').innerHTML=themeChips(css);
 }
 function applyCss(css){
   var st=el('st-css');
@@ -1507,6 +1532,15 @@ function roomLabel(r){
   if(r.slice(0,2)==='g:'){var hr=hostedByCall[r.slice(2)];return hr?hr.name:r.slice(2);}
   return r==='local'?'Local':r==='regional'?'Regional':r==='global'?'Global':
          r==='social'?'Social':r.slice(3);}
+/* The drawer on a narrow screen (the CSS decides when #side is one). */
+function toggleSide(){var o=!el('side').classList.contains('open');el('side').className=o?'open':'';el('sidebg').className=o?'open':'';}
+function closeSide(){el('side').className='';el('sidebg').className='';}
+function drawRoomBar(){
+  var n=0,k;for(k in dmUnread)if(dmUnread[k])n++;
+  var b=el('rb-name'),c=el('rb-cnt');if(!b)return;
+  b.textContent=curRoom==='forum'?'Forum':roomLabel(curRoom);
+  c.style.display=n?'':'none';c.textContent=n;
+}
 function renderSide(){
   var el=document.getElementById('side');
   var htmlp='<div class="roomhead">Chat</div>';
@@ -1546,11 +1580,13 @@ function renderSide(){
   for(var i=0;i<items.length;i++)
     items[i].onclick=(function(r){return function(){switchRoom(r);};})(
       items[i].getAttribute('data-r'));
+  drawRoomBar();
 }
 /* Rooms the station keeps from visitors outside its network. */
 var roomPrivate={};
 function switchRoom(r){
   curRoom=r;stSet('xprs_room',r);
+  closeSide();
   cancelReply();
   seen={};
   var note='',canPost=true;
@@ -2424,7 +2460,7 @@ function drawAdmin(d){
       '<div class="frow"><span class="sp"></span>'+
       '<button class="act quiet" onclick="el(\'ad-logo\').value=\'\'">Default</button>'+
       '<button class="act primary" onclick="adminSet({page_logo:el(\'ad-logo\').value})">Save</button></div>'+
-      '<label class="lead" style="display:block;margin-top:12px">Theme: pick one, or write your own stylesheet below; the colours are custom properties on <code>:root</code></label>'+
+      '<label class="lead" style="display:block;margin-top:12px">Theme: pick one and it is saved; its stylesheet appears below to edit, Save keeps the edits</label>'+
       '<div class="themes" id="themes">'+themeChips(s.page_css||'')+'</div>'+
       '<textarea id="ad-css" rows="14" oninput="adminDirty=true" spellcheck="false" placeholder=":root{--accent:#6fc3ff}">'+esc(s.page_css||'')+'</textarea>'+
       '<div class="frow"><span class="sp"></span>'+
