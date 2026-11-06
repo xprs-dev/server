@@ -194,16 +194,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 #banner{border-bottom:1px solid var(--border);padding:8px 44px 8px 12px;font-size:13px;
         line-height:1.45;max-height:28vh;overflow:auto;position:relative;background:#121212}
 #banner.hide{display:none}
+/* Minimized: its first line, cut with an ellipsis, and the arrow to open it. */
+#banner.min{padding-top:5px;padding-bottom:5px;overflow:hidden;cursor:pointer}
+#banner.min #bn-body{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#banner.min #bn-body *{display:inline}
 #banner a{color:var(--accent)}
 #banner .bn-x{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;
         border:1px solid var(--border);color:var(--muted);border-radius:4px;width:26px;height:26px;
         cursor:pointer;font-size:14px;line-height:1}
 #banner .bn-x:hover{color:var(--text);border-color:var(--text)}
-/* A phone held sideways has no height to spare: one line, cut with an ellipsis. */
+/* A phone held sideways has little height to spare: smaller, and open it
+   scrolls within a third of the screen. */
 @media (max-height:480px) and (orientation:landscape){
-  #banner{padding-top:5px;padding-bottom:5px;font-size:12px;white-space:nowrap;
-          overflow:hidden;text-overflow:ellipsis;max-height:none}
-  #banner #bn-body{overflow:hidden;text-overflow:ellipsis}
+  #banner{font-size:12px;max-height:34vh}
+  #banner.min{padding-top:3px;padding-bottom:3px}
 }
 .header .logo{cursor:pointer}
 .cat{cursor:pointer}
@@ -387,7 +391,6 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
       <div class="menu-sec">This page</div>
       <button onclick="clearChat()">Clear chat view</button>
       <button onclick="toggleSound()" id="sndbtn">Sound: on</button>
-      <button onclick="bannerToggle()" id="bnbtn" style="display:none">Hide banner</button>
     </div>
   </div>
 </div>
@@ -404,7 +407,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
   </div>
 </div>
 <div id="banner" class="hide"><div id="bn-body"></div>
-  <button class="bn-x" onclick="bannerToggle()" title="Hide the banner">&#10005;</button></div>
+  <button class="bn-x" id="bn-x" onclick="bannerToggle()" title="Minimize">&#9652;</button></div>
 <div class="tabs" id="tabs">
   <button data-tab="chat" class="on" onclick="showTab('chat')">Chat</button>
   <button data-tab="traffic" onclick="showTab('traffic')">Traffic</button>
@@ -863,19 +866,23 @@ function snack(t){
 /* The logo: back to the conversation, whatever was open. */
 function goHome(){closeMenu();if(tab!=='chat')showTab('chat');switchRoom('local');}
 // ---- the station's banner: its administrator's HTML, under the header ----
-// Shown to every visitor until they hide it; hidden stays hidden on this
-// browser (xprs_banner). The menu shows or hides it again.
+// Open for every visitor until they minimize it to its first line; the
+// choice is kept on this browser (xprs_banner). A station that has no
+// banner of its own gets the page's text; one set to no text shows none.
 var bannerHtml='',bannerDrawn='';
-function bannerHidden(){return stGet('xprs_banner')==='hide';}
+function bannerMin(){return stGet('xprs_banner')==='min';}
 function drawBanner(){
-  var b=el('banner'),m=el('bnbtn');
+  var b=el('banner');
   if(!b)return;
-  if(bannerHtml!==bannerDrawn){el('bn-body').innerHTML=bannerHtml;bannerDrawn=bannerHtml;}
-  var has=!!bannerHtml.replace(/<[^>]*>/g,'').trim()||/<img|<svg/i.test(bannerHtml);
-  b.className=has&&!bannerHidden()?'':'hide';
-  if(m){m.style.display=has?'':'none';m.textContent=bannerHidden()?'Show banner':'Hide banner';}
+  var html=bannerHtml===''?BANNER_DEFAULT:bannerHtml;
+  if(html!==bannerDrawn){el('bn-body').innerHTML=html;bannerDrawn=html;}
+  var has=!!html.replace(/<[^>]*>/g,'').trim()||/<img|<svg/i.test(html);
+  b.className=!has?'hide':bannerMin()?'min':'';
+  el('bn-x').innerHTML=bannerMin()?'&#9662;':'&#9652;';
+  el('bn-x').title=bannerMin()?'Open':'Minimize';
+  b.onclick=bannerMin()?bannerToggle:null;
 }
-function bannerToggle(){closeMenu();stSet('xprs_banner',bannerHidden()?'show':'hide');drawBanner();}
+function bannerToggle(){stSet('xprs_banner',bannerMin()?'open':'min');drawBanner();}
 function toggleMenu(){
   var m=document.getElementById('menu');
   m.className=m.className.indexOf('open')>=0?'menu-panel':'menu-panel open';}
@@ -2279,8 +2286,8 @@ function drawAdmin(d){
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
     h+='<h3>Banner</h3><div class="card">'+
-      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.banner||'')+'</textarea>'+
-      '<div class="frow"><span class="sp"></span>'+
+      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor">'+esc(s.banner||BANNER_DEFAULT)+'</textarea>'+
+      '<div class="frow"><span class="lead">Empty shows the page&rsquo;s own text; <code>&lt;!-- none --&gt;</code> shows nothing.</span><span class="sp"></span>'+
       '<button class="act quiet" onclick="el(\'ad-banner\').value=BANNER_DEFAULT">Default</button>'+
       '<button class="act primary" onclick="adminSet({banner:el(\'ad-banner\').value})">Save</button></div></div>';
     h+=drawModeration(d,true);
@@ -2338,13 +2345,18 @@ function drawModeration(d,isAdmin){
 // (public or private, anyone or members posting), adds members and appoints
 // moderators; the station signs those acts as the room. Members accept with
 // their own signature (10.3.1). Traffic stays on the station.
-var canRooms=false,hostedRooms=[],hostedByCall={};
+var canRooms=false,hostedRooms=[],hostedByCall={},roomAccepting={};
 function loadRooms(cb){
   if(!canRooms)return;
   getJSON('/api/rooms'+(sess?'?session='+encodeURIComponent(sess):''),function(d){
     if(!d||!d.rooms)return;
     hostedRooms=d.rooms;hostedByCall={};
-    for(var i=0;i<d.rooms.length;i++)hostedByCall[d.rooms[i].call]=d.rooms[i];
+    for(var i=0;i<d.rooms.length;i++){var hr=d.rooms[i];hostedByCall[hr.call]=hr;
+      /* The administrator moderates every room: the role the station offers
+       * on each is accepted as it comes, once. */
+      if(isStationAdmin&&hr.role==='invited'&&hr.offer&&!roomAccepting[hr.call]){
+        roomAccepting[hr.call]=1;acceptRoom(hr.call,hr.offer,hr.offer_role||'mod');}
+    }
     renderSide();
     if(curRoom.slice(0,2)==='g:')switchRoom(curRoom);
     if(curRoom.slice(0,2)==='f:')forumComposer();
@@ -2370,7 +2382,7 @@ function acceptRoom(call,offer,role){
     if(!w)return snack('Not signed');
     postWire(w,function(ok,why){
       if(!ok)return snack(why||'The station refused it');
-      snack('Joined '+roomLabel('g:'+call));
+      if(!isStationAdmin)snack('Joined '+roomLabel('g:'+call));
       loadRooms(function(){if(tab==='admin')loadAdmin();});
     });
   });
@@ -2437,7 +2449,7 @@ function drawRooms(){
         (r.kind==='forum'?'<span class="pill">forum</span>':'')+
         (r.mirrored?'<span class="pill on" title="a copy of a room another station holds (XPRS.md 10.10.1)">mirrored from '+esc(r.owner||'')+'</span>':'')+
         (r.shared?'<span class="pill on">shared</span>':'')+
-        (r.role==='invited'&&r.offer?'<span class="sp"></span><button class="act primary" onclick="acceptRoom(\''+c+
+        (r.role==='invited'&&r.offer&&!isStationAdmin?'<span class="sp"></span><button class="act primary" onclick="acceptRoom(\''+c+
           '\',\''+esc(r.offer)+'\',\''+esc(r.offer_role||'mod')+'\')">Accept moderating</button>':'')+'</div>'+
       (r.about?'<div class="lead" style="margin-top:6px">'+esc(r.about)+'</div>':'')+
       '<div class="pills">'+pills('Members',r.members)+pills('Moderators',r.moderators)+
@@ -3059,7 +3071,8 @@ function loadMyRole(){
     if(!d||!d.ok)return;
     if(d.station)stationCall=d.station;
     myStationRole=d.role||'none';
-    isStationAdmin=!!d.you;stationHasAdmin=!!d.admin;
+    var was=isStationAdmin;isStationAdmin=!!d.you;stationHasAdmin=!!d.admin;
+    if(isStationAdmin&&!was&&canRooms)loadRooms();
     if(curRoom==='forum')fabSet(isStationAdmin?'category':null);
     if(curRoom==='alerts')fabSet(canAlert()?'alert':null);
     myOffer=d.offer||'';
@@ -3071,7 +3084,9 @@ function loadMyRole(){
 }
 var adminInvitedSaid=false,isStationAdmin=false,stationHasAdmin=false;
 /* What a station shows until its administrator writes their own. */
-var BANNER_DEFAULT='<strong>Welcome to this station.</strong> Operated by <em>your name</em> from <em>your town</em>. Local chat, alerts, posts and a forum for the area it reaches.';
+var BANNER_DEFAULT='<strong>This is an XPRS station.</strong> It relays short messages over radio and the internet for the area it reaches. '+
+  'Local, Regional and Global are its chat rooms; Alerts carries warnings for the area; Blog and Forum keep what people wrote. '+
+  'Everything here is public and signed with a key this page made for you: keep it (menu, top right) and you stay the same callsign on every station.';
 function tsAt(ms){
   var d=new Date(ms),p=function(n){return (n<10?'0':'')+n;};
   return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+
