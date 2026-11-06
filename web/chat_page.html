@@ -1984,8 +1984,9 @@ function loadStation(){
              (d.net.internet?'reachable':'no'));
     if(d.heard!==undefined)
       h+=row('Heard',esc(d.heard)+' packets, '+esc(d.in_reach||0)+' in reach now');
-    if(d.indexer)
-      h+=row('Archive',esc(d.indexer.count)+' packets held');
+    var ar=d.archiver||d.indexer; // "indexer" until 2026-11-06, older builds
+    if(ar)
+      h+=row('Archive',esc(ar.count)+' packets held');
     h+='</table>';
     if(d.lora){
       h+='<h3>LoRa</h3><table class="kv">'+
