@@ -19,6 +19,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:hex/hex.dart';
+
 import 'package:reticulum/reticulum.dart' show NostrCrypto, Tier;
 import 'package:xprs_core/src/platform/core_host.dart';
 import 'package:xprs_core/src/platform/heartbeat_keep_alive.dart';
@@ -92,6 +94,9 @@ class Station {
     // Every verified act about a room this station runs (its own rooms and
     // the ones it hosts) goes to the group store, which a restart replays.
     XprsGroups.instance.onActVerified = XprsGroupKeys.instance.putAct;
+    // And the record verifies the station's own acts by the station's own key.
+    final heard = XprsGroups.instance.keyResolver;
+    XprsGroups.instance.keyResolver = (c) => heard?.call(c) ?? keyFor(c);
     LogService.instance.add('server: mesh core up as $callsign');
   }
 
@@ -187,7 +192,7 @@ class Station {
     ),
     mayAir: XprsPublisher.instance.mayAir,
     selfCallsign: () => MeshService.instance.tableCallsign,
-    keyOf: (c) => XprsArchive.instance.keyResolver?.call(c),
+    keyOf: keyFor,
     appPath: () => null,
     // The administrator and the visitor settings live with the station's.
     store: _store,
@@ -233,6 +238,24 @@ class Station {
           limit: limit,
         ),
   );
+
+  /// The key for a callsign: what the core heard, or this station's own. A
+  /// station never hears its own identity, so without the fallback it could
+  /// not verify the acts it signs itself (XPRS.md 10.10: appointing a
+  /// moderator), and XprsGroups dropped them as unverified.
+  Uint8List? keyFor(String call) {
+    final heard = XprsArchive.instance.keyResolver?.call(call);
+    if (heard != null) return heard;
+    final me = MeshService.instance.tableCallsign.trim().toUpperCase().split('-').first;
+    if (me.isEmpty || call.trim().toUpperCase().split('-').first != me) return null;
+    final npub = ProfileService.instance.activeProfile?.npub ?? '';
+    if (!npub.startsWith('npub1')) return null;
+    try {
+      return Uint8List.fromList(HEX.decode(NostrCrypto.decodeNpub(npub)));
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// The station's own network: private addresses, plus the IPv6 /64s this
   /// machine has public addresses in (an IPv6 LAN hands out public ones).
