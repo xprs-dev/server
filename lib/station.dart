@@ -229,11 +229,11 @@ class Station {
       // Visible to the next poll, not in twenty seconds.
       XprsArchive.instance.flush();
     },
-    roomRows: ({required room, sinceMs, untilMs, required limit}) =>
+    roomRows: ({required room, sinceMs, untilMs, required types, required limit}) =>
         XprsArchive.instance.query(
           sinceMs: sinceMs,
           untilMs: untilMs,
-          types: const ['message', 'reaction'],
+          types: types,
           to: [room],
           limit: limit,
         ),

@@ -135,6 +135,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 .alert.sev-watch{border-left-color:#e0c060}.alert.sev-warning{border-left-color:#ff9a4a}
 .alert.sev-danger{border-left-color:#ff5a5a}.alert.sev-notice{border-left-color:#7fb0ff}.alert.post{border-left-color:var(--accent)}
 .alert.post .body{white-space:pre-wrap}
+.alert.post.topic{cursor:pointer}.alert.post.topic:hover{background:#1a1a1a}
+.alert.post.op{border-left-color:#7fb0ff}
+.card textarea{width:100%;box-sizing:border-box;background:#1b1b1b;color:var(--text);border:1px solid var(--border);
+      border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;min-height:90px;resize:vertical;outline:none}
+.card textarea:focus{border-color:var(--accent)}
 .alert .l1{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:bold;
        text-transform:capitalize}
 .alert .l1 .when{font-weight:normal;font-size:11px;color:var(--muted);text-transform:none}
@@ -1085,6 +1090,7 @@ function sendMsg(){
   if(!text||!canSign()||curRoom==='alerts')return;
   text=text.replace(/[\x00-\x1f]/g,' ');
   sendIdentity();
+  if(curRoom.slice(0,2)==='f:'){t.value='';cancelReply();forumReply(text);return;}
   var thread='';
   if(replyTo){
     if(replyTo.root)thread=' root:'+replyTo.root;
@@ -1313,6 +1319,7 @@ function roomOf(row){
 function roomLabel(r){
   if(r==='alerts')return 'Alerts';
   if(r==='blog')return 'Blog';
+  if(r.slice(0,2)==='f:'){var fr=hostedByCall[r.slice(2)];return fr?fr.name:r.slice(2);}
   if(r==='dmnew')return 'Private message';
   if(r.slice(0,2)==='g:'){var hr=hostedByCall[r.slice(2)];return hr?hr.name:r.slice(2);}
   return r==='local'?'Local':r==='regional'?'Regional':r==='global'?'Global':
@@ -1327,11 +1334,15 @@ function renderSide(){
   var extra='<div class="roomhead">People</div>'+
     '<div class="room new'+(curRoom==='dmnew'?' on':'')+'" data-r="dmnew">+ Private message</div>';
   /* Rooms this station hosts (XPRS.md 10.10.1): the ones we may see. */
-  var hosted=hostedRooms.length?'<div class="roomhead">Station rooms</div>'+
-    hostedRooms.map(function(hr){var k='g:'+hr.call;
+  function roomEntries(list,prefix){return list.map(function(hr){var k=prefix+hr.call;
       return '<div class="room'+(curRoom===k?' on':'')+'" data-r="'+k+'">'+esc(hr.name)+
         (hr.visibility==='private'?'<span class="lock" title="private: members only">&#128274;</span>':'')+
-        '</div>';}).join(''):'';
+        '</div>';}).join('');}
+  var chatRooms=hostedRooms.filter(function(hr){return hr.kind!=='forum';}),
+      forumRooms=hostedRooms.filter(function(hr){return hr.kind==='forum';});
+  var hosted=chatRooms.length?'<div class="roomhead">Station rooms</div>'+roomEntries(chatRooms,'g:'):'';
+  /* Forum rooms (XPRS.md 18.5): topics and their comments, kept and read later. */
+  var forum=forumRooms.length?'<div class="roomhead">Forum</div>'+roomEntries(forumRooms,'f:'):'';
   el.innerHTML=htmlp+
     rooms.map(function(r){return '<div class="room'+(curRoom===r?' on':'')+
       '" data-r="'+r+'">'+roomLabel(r)+'</div>';}).join('')+
@@ -1342,7 +1353,7 @@ function renderSide(){
       alertsLabel()+'</div>'+
     '<div class="room'+(curRoom==='blog'?' on':'')+'" data-r="blog" id="blogroom">'+
       blogLabel()+'</div>'+
-    hosted+extra+
+    forum+hosted+extra+
     peers.map(function(p){var r='dm:'+p;
       return '<div class="room'+(curRoom===r?' on':'')+(dmUnread[p]?' unread':'')+
       '" data-r="'+r+'">'+p+(dmUnread[p]?' <span class="cnt">('+dmUnread[p]+')</span>':'')+
@@ -1359,7 +1370,7 @@ function switchRoom(r){
   cancelReply();
   seen={};
   var note='',canPost=true;
-  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'||r==='blog'?' alerts':'');
+  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'||r==='blog'||r.slice(0,2)==='f:'?' alerts':'');
   el('sealbtn').style.display=r.slice(0,3)==='dm:'?'':'none';
   if(r==='dmnew'){
     el('txt').disabled=true;el('txt').placeholder='Choose who to write to';
@@ -1391,6 +1402,14 @@ function switchRoom(r){
     document.getElementById('msgs').innerHTML='';
     renderSide();
     loadBlogFeed(true);
+    return;
+  }
+  if(r.slice(0,2)==='f:'){
+    forumTopic=null;
+    document.getElementById('msgs').innerHTML='';
+    renderSide();
+    forumComposer();
+    loadForum(true);
     return;
   }
   if(r.slice(0,2)==='g:'){
@@ -1787,6 +1806,7 @@ function tick(){
   if(tab==='chat'){
     if(curRoom==='alerts')loadAlertsFeed();
     else if(curRoom==='blog')loadBlogFeed();
+    else if(curRoom.slice(0,2)==='f:')loadForum();
     else if(curRoom.slice(0,2)==='g:')loadHosted();
     else load();
   }
@@ -2259,6 +2279,7 @@ function loadRooms(cb){
     for(var i=0;i<d.rooms.length;i++)hostedByCall[d.rooms[i].call]=d.rooms[i];
     renderSide();
     if(curRoom.slice(0,2)==='g:')switchRoom(curRoom);
+    if(curRoom.slice(0,2)==='f:')forumComposer();
     if(cb)cb(d.rooms);
   });
 }
@@ -2302,7 +2323,7 @@ function roomCreate(){
   var name=(el('rn-name').value||'').trim();
   if(!name)return snack('A room needs a name');
   roomPost({action:'create',name:name,about:(el('rn-about').value||'').trim(),
-            visibility:el('rn-vis').value,posting:el('rn-post').value},function(j){
+            visibility:el('rn-vis').value,posting:el('rn-post').value,kind:el('rn-kind').value},function(j){
     snack('Room created');
     /* The station offered us its moderator role: accept it now. */
     var hr=hostedByCall[j.room];
@@ -2364,12 +2385,188 @@ function drawRooms(){
      '<div class="frow"><select id="rn-vis"><option value="public">Public: everyone reads</option>'+
      '<option value="private">Private: members only</option></select>'+
      '<select id="rn-post"><option value="anyone">Anyone posts</option><option value="members">Members post</option></select>'+
+     '<select id="rn-kind"><option value="chat">Chat: a conversation</option><option value="forum">Forum: topics and comments</option></select>'+
      '<span class="sp"></span><button class="act primary" onclick="roomCreate()">Create room</button></div>'+
      '<p class="lead" style="margin-top:10px">A room is a closed group this station holds the key of: '+
      'its messages stay here and are never put on the air.</p></div>';
   return h;
 }
 
+// ---- forum (XPRS.md 18.5): a hosted room of posts --------------------------
+// A forum room is a station room (10.10.1) whose posts are t:blog: a titled
+// post opens a topic, replaced by a later one of the same title from its
+// author (18.1); an untitled post naming it with r: is a comment. The station
+// keeps the room's index (/api/rooms?topics=) and a topic's thread
+// (history root=); the page shows topics as cards and a thread as the opening
+// post with its comments beneath, and the composer replies while one is open.
+var forumTopic=null,forumAt=0;
+function forumRoom(){return curRoom.slice(0,2)==='f:'?hostedByCall[curRoom.slice(2)]:null;}
+function forumComposer(){
+  var hr=forumRoom(),t=el('txt');
+  if(!hr)return;
+  if(!forumTopic){t.disabled=true;t.placeholder='Open a topic to reply, or start one';return;}
+  t.disabled=!hr.can_post;
+  t.placeholder=hr.can_post?'Reply in '+forumTopic.title.replace(/-/g,' '):
+    (!sess?'Prove your key to post (menu, top right)':
+     'Only members post in '+hr.name);
+}
+/* A label (XPRS.md 18.1): lowercase letters, digits and dashes. */
+function slugOf(t){return (t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40).replace(/-+$/,'');}
+/* Up to nine parts of at most 250 bytes, split at spaces (7.6), signed once
+ * over the whole and carried on the last part (9.1.1). cb(wires) or
+ * cb(null, why). A post that fits one packet is signed as one. */
+function splitSigned(head,text,cb){
+  var canonical=head+' m:'+text;
+  if(u8(canonical).length+65<=250){signAny(canonical,function(w,why){cb(w?[w]:null,why);});return;}
+  var per=250-u8(head).length-6-65-3;        /* n:i/k, sig:, m: */
+  if(per<24)return cb(null,'Too long a head for a split post');
+  var words=text.split(' '),parts=[],cur='',i;
+  for(i=0;i<words.length;i++){
+    if(u8(words[i]).length>per)return cb(null,'A word too long for one packet');
+    var next=cur?cur+' '+words[i]:words[i];
+    if(u8(next).length>per){parts.push(cur);cur=words[i];}else cur=next;
+  }
+  if(cur)parts.push(cur);
+  if(parts.length>9)return cb(null,'Too long: a post is at most nine packets, about '+(9*per)+' characters here');
+  signAny(canonical,function(signed,why){
+    if(!signed)return cb(null,why);
+    var m=signed.match(/ sig:([!-~]{60})/);
+    if(!m)return cb(null,'Not signed');
+    var k=parts.length,out=[],j;
+    for(j=0;j<k;j++)out.push(head+' n:'+(j+1)+'/'+k+(j===k-1?' sig:'+m[1]:'')+' m:'+parts[j]);
+    cb(out);
+  });
+}
+/* One after another: the station holds the parts until the last arrives. */
+function postWires(wires,i,cb){
+  if(i>=wires.length)return cb(true);
+  postWire(wires[i],function(ok,why){if(!ok)return cb(false,why);postWires(wires,i+1,cb);});
+}
+function forumNewTopic(){
+  var hr=forumRoom();if(!hr)return;
+  var title=slugOf(el('ft-title').value),text=(el('ft-text').value||'').trim().replace(/[\x00-\x1f]+/g,' ');
+  if(!title)return snack('A topic needs a title');
+  if(!text)return snack('Write the post first');
+  if(!canSign())return snack('Not ready');
+  sendIdentity();
+  var head='t:blog f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' title:'+title;
+  splitSigned(head,text,function(wires,why){
+    if(!wires)return snack(why||'Not signed');
+    postWires(wires,0,function(ok,why2){
+      if(!ok)return snack(why2||'The station refused it');
+      el('ft-title').value='';el('ft-text').value='';
+      snack('Topic posted');loadForum(true);
+    });
+  });
+}
+function forumReply(text){
+  var hr=forumRoom();if(!hr||!forumTopic)return;
+  var head='t:blog f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' r:'+forumTopic.id;
+  splitSigned(head,text,function(wires,why){
+    if(!wires)return snack(why||'Not signed');
+    postWires(wires,0,function(ok,why2){
+      if(!ok)return snack(why2||'The station refused it');
+      loadForum(true);
+    });
+  });
+}
+/* The author withdraws a post (7.8.2); a room moderator takes one down (10.10). */
+function forumWithdraw(id){
+  var hr=forumRoom();if(!hr)return;
+  if(!confirm('Withdraw this post?'))return;
+  signAny('t:blog f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' r:'+id+' remove:blog',function(w){
+    if(!w)return snack('Not signed');
+    postWire(w,function(ok,why){
+      if(!ok)return snack(why||'The station refused it');
+      snack('Withdrawn');if(forumTopic&&forumTopic.id===id)forumTopic=null;loadForum(true);
+    });
+  });
+}
+function forumRemove(id){
+  var hr=forumRoom();if(!hr)return;
+  if(!confirm('Delete this post for everyone? This cannot be undone.'))return;
+  signAny('t:moderate f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' r:'+id+' remove:message',function(w){
+    if(!w)return snack('Not signed');
+    postWire(w,function(ok,why){
+      if(!ok)return snack(why||'The station refused it');
+      snack('Deleted');if(forumTopic&&forumTopic.id===id)forumTopic=null;loadForum(true);
+    });
+  });
+}
+function openTopic(id,title){forumTopic={id:id,title:title};forumComposer();el('msgs').innerHTML='';loadForum(true);}
+function closeTopic(){forumTopic=null;forumComposer();el('msgs').innerHTML='';loadForum(true);}
+function topicForm(hr){
+  if(!hr.can_post)return '<div class="card"><p class="lead">'+
+    (!sess?'Prove your key (menu, top right) to open a topic or reply.':
+     'Only members of '+esc(hr.name)+' open topics and reply.')+'</p></div>';
+  return '<div class="card" id="topicform"><h4>New topic</h4>'+
+    '<div class="frow first"><input id="ft-title" class="grow" maxlength="60" placeholder="Title (becomes a label: balun-question)"></div>'+
+    '<div class="frow"><textarea id="ft-text" maxlength="1600" placeholder="Your post: up to about 1500 characters, signed by you"></textarea></div>'+
+    '<div class="frow"><span class="sp"></span><button class="act primary" onclick="forumNewTopic()">Post topic</button></div></div>';
+}
+function topicCards(list){
+  var h='',now=Math.floor(Date.now()/1000),i;
+  if(!list.length)return '<div class="card"><div class="empty">No topics yet.</div></div>';
+  for(i=0;i<list.length;i++){var t=list[i];
+    h+='<div class="alert post topic" data-id="'+esc(t.id)+'" onclick="openTopic(\''+esc(t.id)+'\',\''+esc(t.title)+'\')">'+
+      '<div class="l1"><span>'+esc((t.title||'').replace(/-/g,' '))+'</span>'+
+      (t.edited?'<span class="pill">edited</span>':'')+
+      '<span class="sp"></span><span class="when">'+(t.last?esc(ago(now-t.last))+' ago':'')+'</span></div>'+
+      '<div class="l2">'+callLink(t.from||'')+
+      '<span>'+t.replies+(t.replies===1?' reply':' replies')+'</span>'+
+      (t.tags?t.tags.split(',').map(function(x){return '<span class="pill">'+esc(x)+'</span>';}).join(''):'')+
+      '</div></div>';
+  }
+  return h;
+}
+/* A post as a card: the opening post with its title, or a comment. */
+function postCard(p,op){
+  var hr=forumRoom(),now=Math.floor(Date.now()/1000);
+  var own=baseCall(p.from)===baseCall(mycall),mod=hr&&hr.role==='mod';
+  var badge=p.sig==='verified'?'<span class="badge ok">signed</span>':(p.sig==='none'?'<span class="badge bad">unsigned</span>':'');
+  return '<div class="alert post'+(op?' op':'')+'" data-id="'+esc(p.id)+'">'+
+    '<div class="l1"><span>'+(op?esc((p.title||'').replace(/-/g,' ')):esc(p.from))+'</span>'+badge+
+    (p.edited?'<span class="pill">edited</span>':'')+
+    '<span class="sp"></span><span class="when">'+(p.ts?esc(ago(now-p.ts))+' ago':'')+'</span></div>'+
+    '<div class="body">'+esc(p.text)+'</div>'+
+    '<div class="l2">'+(op?callLink(p.from):'')+
+    (p.tags?p.tags.split(',').map(function(x){return '<span class="pill">'+esc(x)+'</span>';}).join(''):'')+
+    '<span class="sp"></span>'+
+    (own?'<button class="act quiet" onclick="forumWithdraw(\''+esc(p.id)+'\')">Withdraw</button>':
+     mod?'<button class="act quiet" onclick="forumRemove(\''+esc(p.id)+'\')">Delete</button>':'')+
+    '</div></div>';
+}
+function loadForum(force){
+  var hr=forumRoom();if(!hr)return;
+  var t=Date.now();
+  if(!force&&t-forumAt<15000)return;
+  forumAt=t;
+  var q=sess?'&session='+encodeURIComponent(sess):'';
+  var here='f:'+hr.call;
+  if(!forumTopic){
+    getJSON('/api/rooms?topics='+encodeURIComponent(hr.call)+q,function(d){
+      if(!d||!d.ok||curRoom!==here||forumTopic)return;
+      el('msgs').innerHTML=topicForm(hr)+topicCards(d.topics||[]);
+    });
+    return;
+  }
+  var want=forumTopic.id;
+  getJSON('/api/xprs/history?room='+encodeURIComponent(hr.call)+'&kind=blog&root='+encodeURIComponent(want)+'&limit=200'+q,function(d){
+    if(!d||!d.rows||curRoom!==here||!forumTopic||forumTopic.id!==want)return;
+    if(d.moderation)applyModeration({removed:d.moderation.removed||[],away:Object.keys(modAway)});
+    var posts=blogPosts(d.rows),i,top=null,comments=[];
+    for(i=0;i<posts.length;i++){
+      if(modRemoved[posts[i].id])continue;
+      if(posts[i].title){if(!top)top=posts[i];}
+      else comments.push(posts[i]);
+    }
+    comments.sort(function(a,b){return a.ts-b.ts;});
+    el('msgs').innerHTML='<div class="roomnote"><button class="act quiet" onclick="closeTopic()">&#8592; Topics</button> '+esc(hr.name)+'</div>'+
+      (top?postCard(top,true):'<div class="card"><div class="empty">This topic is gone.</div></div>')+
+      comments.map(function(c){return postCard(c,false);}).join('');
+    var box=el('msgs');box.scrollTop=box.scrollHeight;
+  });
+}
 // ---- blog (XPRS.md 18): the posts the station holds, newest first --------
 // A post is a t:blog packet: published, kept, listed and read later by people
 // who were not listening when it went out. A long one arrives split (7.6) and
@@ -2404,7 +2601,10 @@ function blogPosts(rows){
     if(st.got<st.of||!st.parts[1])continue;    /* a hole: never shown (6.6) */
     var text=[],k;for(k=1;k<=st.of;k++)text.push(st.parts[k]);
     w=st.row.wire||'';
-    var p={id:st.row.id||wireId(w),from:st.row.from||'',ts:st.row.ts||0,
+    /* The identifier is the packet the parts reassemble into (7.6): the head
+     * without n:, the joined text. A comment names that, never a part. */
+    var wholeW=st.of>1?w.replace(/ n:[1-9]\/[1-9]/,'').replace(/ m:[\s\S]*$/,'')+' m:'+text.join(' '):w;
+    var p={id:wireId(wholeW),from:st.row.from||'',ts:st.row.ts||0,
            title:headField(w,'title'),tags:headField(w,'tag'),file:headField(w,'file'),
            text:text.join(' '),edited:false,sig:st.row.sig||''};
     if(p.title){var tk=baseCall(p.from)+'|'+p.title,q=byTitle[tk];
