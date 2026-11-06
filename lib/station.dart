@@ -113,6 +113,7 @@ class Station {
   void _wireSharedRooms(FileKeyValueStore store) {
     final api = _api ??= _webChatApi();
     XprsHistoryServer.instance.hostedRoom = api.roomServable;
+    XprsHistoryServer.instance.roomPeers = api.roomPeers;
     final mirror = XprsGroupMirror.instance;
     mirror.store = store;
     mirror.selfCallsign = () => callsign;

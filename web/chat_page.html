@@ -2413,7 +2413,15 @@ function drawRooms(){
 }
 function roomShare(call){
   var peers=(el('rsp-'+call).value||'').toUpperCase().split(/[\s,]+/).filter(function(x){return x;});
-  roomPost({action:'share',call:call,shared:el('rs-'+call).checked,peers:peers},function(){snack('Sharing saved');});
+  var shared=el('rs-'+call).checked,hr=hostedByCall[call];
+  /* Private means served to members, not secret (XPRS.md 10.10.1): shared,
+   * the other stations' operators can read it too. Said before it is done. */
+  if(shared&&hr&&hr.visibility==='private'&&!hr.shared){
+    if(!peers.length)return snack('A private room is shared with named stations');
+    if(!confirm('This room is private: its members read it, and so can you. Shared with '+peers.join(', ')+
+                ', the operators of those stations can read it as well. Share it?'))return;
+  }
+  roomPost({action:'share',call:call,shared:shared,peers:peers},function(){snack('Sharing saved');});
 }
 function roomMirror(){
   var call=(el('mr-call').value||'').trim().toUpperCase(),owner=(el('mr-owner').value||'').trim().toUpperCase();
