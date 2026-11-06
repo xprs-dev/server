@@ -2361,15 +2361,26 @@ function drawRooms(){
       '<div class="frow first"><b>'+esc(r.name)+'</b><span class="pill">'+c+'</span>'+
         '<span class="pill'+(priv?' on':'')+'">'+(priv?'&#128274; private':'public')+'</span>'+
         '<span class="pill">'+(r.posting==='anyone'?'anyone posts':'members post')+'</span>'+
+        (r.kind==='forum'?'<span class="pill">forum</span>':'')+
+        (r.mirrored?'<span class="pill on" title="a copy of a room another station holds (XPRS.md 10.10.1)">mirrored from '+esc(r.owner||'')+'</span>':'')+
+        (r.shared?'<span class="pill on">shared</span>':'')+
         (r.role==='invited'&&r.offer?'<span class="sp"></span><button class="act primary" onclick="acceptRoom(\''+c+
           '\',\''+esc(r.offer)+'\',\''+esc(r.offer_role||'mod')+'\')">Accept moderating</button>':'')+'</div>'+
       (r.about?'<div class="lead" style="margin-top:6px">'+esc(r.about)+'</div>':'')+
       '<div class="pills">'+pills('Members',r.members)+pills('Moderators',r.moderators)+
         (r.invited&&r.invited.length?pills('Invited',r.invited):'')+'</div>'+
-      '<div class="frow"><input id="rm-'+c+'" class="grow" placeholder="Callsign" style="text-transform:uppercase">'+
+      (r.mirrored?'':'<div class="frow"><input id="rm-'+c+'" class="grow" placeholder="Callsign" style="text-transform:uppercase">'+
         '<button class="act" onclick="roomDo(\'add\',\''+c+'\')">Add member</button>'+
         '<button class="act" onclick="roomDo(\'appoint\',\''+c+'\')">Appoint moderator</button>'+
-        '<button class="act quiet" onclick="roomDo(\'remove\',\''+c+'\')">Remove</button></div>'+
+        '<button class="act quiet" onclick="roomDo(\'remove\',\''+c+'\')">Remove</button></div>')+
+      /* Sharing between stations (XPRS.md 10.10.1): the owner names peers,
+       * or leaves the list empty to let any station mirror a public room. */
+      (r.mirrored?'<div class="frow"><span class="lead">Kept in step with '+esc(r.owner||'')+': what is posted here reaches it, and its record rules here.</span>'+
+          '<span class="sp"></span><button class="act" onclick="roomPost({action:\'sync\',call:\''+c+'\'},function(){snack(\'Asked \'+'+JSON.stringify(r.owner||'')+'+\' now\');})">Sync now</button></div>':
+       '<div class="frow"><label class="opt"><input type="checkbox" id="rs-'+c+'"'+(r.shared?' checked':'')+'> Shared with other stations</label>'+
+          '<input id="rsp-'+c+'" class="grow" placeholder="Peer stations, e.g. X3ABCD X3EFGH (empty: any station may mirror a public room)" value="'+esc((r.peers||[]).join(' '))+'" style="text-transform:uppercase">'+
+          '<button class="act" onclick="roomShare(\''+c+'\')">Save sharing</button></div>'+
+          (r.shared&&r.seen&&r.seen.length?'<div class="pills">'+pills('Mirrored by',r.seen)+'</div>':''))+
       '<div class="frow"><select id="rv-'+c+'" onchange="roomSet(\''+c+'\')">'+
         '<option value="public"'+(priv?'':' selected')+'>Public: everyone reads</option>'+
         '<option value="private"'+(priv?' selected':'')+'>Private: members only</option></select>'+
@@ -2377,7 +2388,8 @@ function drawRooms(){
         '<option value="anyone"'+(r.posting==='anyone'?' selected':'')+'>Anyone posts</option>'+
         '<option value="members"'+(r.posting==='members'?' selected':'')+'>Members post</option></select>'+
       '<span class="sp"></span><button class="act quiet" onclick="roomRename(\''+c+'\')">Rename</button>'+
-      '<button class="act danger" onclick="roomClose(\''+c+'\')">Close room</button></div></div>';
+      (r.mirrored?'<button class="act danger" onclick="roomUnmirror(\''+c+'\')">Stop mirroring</button>':
+                  '<button class="act danger" onclick="roomClose(\''+c+'\')">Close room</button>')+'</div></div>';
   }
   h+='<div class="card"><h4>New room</h4>'+
      '<div class="frow first"><input id="rn-name" class="grow" placeholder="Room name">'+
@@ -2388,8 +2400,29 @@ function drawRooms(){
      '<select id="rn-kind"><option value="chat">Chat: a conversation</option><option value="forum">Forum: topics and comments</option></select>'+
      '<span class="sp"></span><button class="act primary" onclick="roomCreate()">Create room</button></div>'+
      '<p class="lead" style="margin-top:10px">A room is a closed group this station holds the key of: '+
-     'its messages stay here and are never put on the air.</p></div>';
+     'its messages stay here and are never put on the air, unless you share it with named stations.</p></div>';
+  h+='<div class="card"><h4>Mirror a room from another station</h4>'+
+     '<div class="frow first"><input id="mr-call" class="grow" placeholder="Room callsign (X5…)" style="text-transform:uppercase">'+
+     '<input id="mr-owner" class="grow" placeholder="Station that holds it (X3…)" style="text-transform:uppercase">'+
+     '<input id="mr-name" class="grow" placeholder="Name shown here (optional)">'+
+     '<span class="sp"></span><button class="act primary" onclick="roomMirror()">Mirror</button></div>'+
+     '<p class="lead" style="margin-top:10px">This station keeps a copy of a room the other station shared with it (XPRS.md 10.10.1): '+
+     'the two ask each other for what the other filed, every minute when there is news. '+
+     'Its record rules here; this station never signs as the room.</p></div>';
   return h;
+}
+function roomShare(call){
+  var peers=(el('rsp-'+call).value||'').toUpperCase().split(/[\s,]+/).filter(function(x){return x;});
+  roomPost({action:'share',call:call,shared:el('rs-'+call).checked,peers:peers},function(){snack('Sharing saved');});
+}
+function roomMirror(){
+  var call=(el('mr-call').value||'').trim().toUpperCase(),owner=(el('mr-owner').value||'').trim().toUpperCase();
+  if(!call||!owner)return snack('The room\u2019s callsign and the station that holds it');
+  roomPost({action:'mirror',call:call,owner:owner,name:(el('mr-name').value||'').trim()},function(){snack('Mirroring '+call+' from '+owner);});
+}
+function roomUnmirror(call){
+  if(!confirm('Stop mirroring this room? What was filed stays.'))return;
+  roomPost({action:'unmirror',call:call},function(){snack('No longer mirrored');});
 }
 
 // ---- forum (XPRS.md 18.5): a hosted room of posts --------------------------
@@ -2546,7 +2579,9 @@ function loadForum(force){
   if(!forumTopic){
     getJSON('/api/rooms?topics='+encodeURIComponent(hr.call)+q,function(d){
       if(!d||!d.ok||curRoom!==here||forumTopic)return;
-      el('msgs').innerHTML=topicForm(hr)+topicCards(d.topics||[]);
+      var note=hr.mirrored?'<div class="roomnote">A copy of a room '+esc(hr.owner||'')+' holds, kept in step with it.</div>':
+               hr.shared?'<div class="roomnote">Shared with other stations'+(hr.peers&&hr.peers.length?': '+esc(hr.peers.join(', ')):'')+'.</div>':'';
+      el('msgs').innerHTML=note+topicForm(hr)+topicCards(d.topics||[]);
     });
     return;
   }

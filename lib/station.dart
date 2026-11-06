@@ -32,6 +32,9 @@ import 'package:xprs_core/src/services/preferences_service.dart';
 import 'package:xprs_core/src/services/receive/packet_gateway.dart';
 import 'package:xprs_core/src/services/reticulum/rns_service.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
+import 'package:xprs_core/src/services/xprs/xprs_group_mirror.dart';
+import 'package:xprs_core/src/services/xprs/xprs_history_server.dart';
+import 'package:xprs_core/src/services/xprs/xprs_ingest.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
 import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
@@ -66,7 +69,9 @@ class Station {
   Station(this.config);
   final StationConfig config;
   Timer? _hubTick;
+  Timer? _mirrorTick;
   FileKeyValueStore? _store;
+  WebChatApi? _api;
 
   String get callsign => MeshService.instance.tableCallsign;
 
@@ -97,7 +102,43 @@ class Station {
     // And the record verifies the station's own acts by the station's own key.
     final heard = XprsGroups.instance.keyResolver;
     XprsGroups.instance.keyResolver = (c) => heard?.call(c) ?? keyFor(c);
+    _wireSharedRooms(store);
     LogService.instance.add('server: mesh core up as $callsign');
+  }
+
+  /// Rooms shared between stations (XPRS.md 10.10.1): the history server
+  /// serves a hosted room only to whom the web chat API says it is shared
+  /// with, and the mirror keeps every shared pair in step with a standing
+  /// ask, once a minute at most, through the hooks the mesh already set.
+  void _wireSharedRooms(FileKeyValueStore store) {
+    final api = _api ??= _webChatApi();
+    XprsHistoryServer.instance.hostedRoom = api.roomServable;
+    final mirror = XprsGroupMirror.instance;
+    mirror.store = store;
+    mirror.selfCallsign = () => callsign;
+    mirror.pairs = api.mirrorPairs;
+    mirror.haveKey = (g) => keyFor(g) != null;
+    api.onSync = mirror.poke;
+    final prevResult = XprsIngest.onResult;
+    XprsIngest.onResult = (p) {
+      prevResult?.call(p);
+      mirror.onResult(p);
+    };
+    final prevHeard = XprsIngest.onHeardAny;
+    XprsIngest.onHeardAny = (p) {
+      prevHeard?.call(p);
+      mirror.noteHeard(p);
+    };
+    final prevAsked = XprsIngest.askedFor;
+    XprsIngest.askedFor = (p) => (prevAsked?.call(p) ?? false) || mirror.askedFor(p);
+    // A replayed act signed by somebody this station never heard (a
+    // moderator who only ever visited the peer): ask the peer for their key.
+    final prevUnknown = XprsGroups.instance.onUnknownSigner;
+    XprsGroups.instance.onUnknownSigner = (c) {
+      prevUnknown?.call(c);
+      mirror.unknownSigner(c);
+    };
+    _mirrorTick = Timer.periodic(const Duration(minutes: 1), (_) => unawaited(mirror.tick()));
   }
 
   /// Reticulum and the hub uplinks. Separate from [start] because dialling
@@ -179,7 +220,7 @@ class Station {
   /// posts go in through the one receive door, reads come from the archive.
   WebChatApi webChatApi() {
     unawaited(_readPrefixes()); // so the first visitor is judged right
-    return _webChatApi();
+    return _api ??= _webChatApi();
   }
 
   WebChatApi _webChatApi() => WebChatApi(
@@ -295,6 +336,7 @@ class Station {
 
   Future<void> stop() async {
     _hubTick?.cancel();
+    _mirrorTick?.cancel();
   }
 }
 
