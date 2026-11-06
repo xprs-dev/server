@@ -133,7 +133,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 .alert{background:#151515;border:1px solid var(--border);border-left:4px solid var(--muted);
        border-radius:10px;padding:10px 14px;margin:0 0 10px}
 .alert.sev-watch{border-left-color:#e0c060}.alert.sev-warning{border-left-color:#ff9a4a}
-.alert.sev-danger{border-left-color:#ff5a5a}.alert.sev-notice{border-left-color:#7fb0ff}
+.alert.sev-danger{border-left-color:#ff5a5a}.alert.sev-notice{border-left-color:#7fb0ff}.alert.post{border-left-color:var(--accent)}
+.alert.post .body{white-space:pre-wrap}
 .alert .l1{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:bold;
        text-transform:capitalize}
 .alert .l1 .when{font-weight:normal;font-size:11px;color:var(--muted);text-transform:none}
@@ -1299,6 +1300,8 @@ function roomOf(row){
   if(row.out)return null;
   /* A status (27) is a feed post, not a conversation: its own timeline. */
   if((row.type||'')==='status'||w.indexOf('t:status ')===0)return 'social';
+  /* A post (18) is listed by the Blog feed as a card, never as a bubble. */
+  if((row.type||'')==='blog'||w.indexOf('t:blog ')===0)return null;
   if(to&&hostedByCall[baseCall(to)])return 'g:'+baseCall(to);
   if(to&&to[0]!=='#'){
     if(baseCall(to)===baseCall(mycall))return 'dm:'+baseCall(row.from);
@@ -1309,6 +1312,7 @@ function roomOf(row){
 }
 function roomLabel(r){
   if(r==='alerts')return 'Alerts';
+  if(r==='blog')return 'Blog';
   if(r==='dmnew')return 'Private message';
   if(r.slice(0,2)==='g:'){var hr=hostedByCall[r.slice(2)];return hr?hr.name:r.slice(2);}
   return r==='local'?'Local':r==='regional'?'Regional':r==='global'?'Global':
@@ -1336,6 +1340,8 @@ function renderSide(){
       '" data-r="social">Social</div>'+
     '<div class="room'+(curRoom==='alerts'?' on':'')+'" data-r="alerts" id="alertsroom">'+
       alertsLabel()+'</div>'+
+    '<div class="room'+(curRoom==='blog'?' on':'')+'" data-r="blog" id="blogroom">'+
+      blogLabel()+'</div>'+
     hosted+extra+
     peers.map(function(p){var r='dm:'+p;
       return '<div class="room'+(curRoom===r?' on':'')+(dmUnread[p]?' unread':'')+
@@ -1353,7 +1359,7 @@ function switchRoom(r){
   cancelReply();
   seen={};
   var note='',canPost=true;
-  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'?' alerts':'');
+  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'||r==='blog'?' alerts':'');
   el('sealbtn').style.display=r.slice(0,3)==='dm:'?'':'none';
   if(r==='dmnew'){
     el('txt').disabled=true;el('txt').placeholder='Choose who to write to';
@@ -1377,6 +1383,14 @@ function switchRoom(r){
     document.getElementById('msgs').innerHTML='';
     renderSide();
     loadAlertsFeed();
+    return;
+  }
+  if(r==='blog'){
+    el('txt').disabled=true;
+    el('txt').placeholder='Posts are published from the XPRS app';
+    document.getElementById('msgs').innerHTML='';
+    renderSide();
+    loadBlogFeed(true);
     return;
   }
   if(r.slice(0,2)==='g:'){
@@ -1772,6 +1786,7 @@ function showTab(t){
 function tick(){
   if(tab==='chat'){
     if(curRoom==='alerts')loadAlertsFeed();
+    else if(curRoom==='blog')loadBlogFeed();
     else if(curRoom.slice(0,2)==='g:')loadHosted();
     else load();
   }
@@ -2354,6 +2369,97 @@ function drawRooms(){
   return h;
 }
 
+// ---- blog (XPRS.md 18): the posts the station holds, newest first --------
+// A post is a t:blog packet: published, kept, listed and read later by people
+// who were not listening when it went out. A long one arrives split (7.6) and
+// the archive files the parts as it heard them, so the page joins them here,
+// keyed on (f, ts) as 6.6 says, and a set with a part missing is not shown.
+// A later post from the same author with the same title: replaces the
+// earlier one (18.1): that is how a post is corrected.
+var blogs=[],blogSeen={},blogAt=0;
+try{var _bs=stGet('xprs_blog_seen');if(_bs)blogSeen=JSON.parse(_bs);}catch(e){}
+/* One value from a wire's head (before m:), or ''. */
+function headField(w,key){
+  var mi=w.indexOf(' m:'),head=(mi>=0?w.slice(0,mi):w)+' ';
+  var m=head.match(new RegExp(' '+key+':([^ ]+) '));return m?m[1]:'';}
+/* History rows -> posts: parts joined, the newest edition per author and
+ * title, newest first. Each: {id,from,ts,title,tags,file,text,edited,sig}. */
+function blogPosts(rows){
+  var sets={},order=[],i,r,w;
+  for(i=0;i<rows.length;i++){r=rows[i];w=r.wire||'';
+    if(w.indexOf('t:blog ')!==0||/ remove:/.test(w))continue;
+    var n=headField(w,'n'),idx=1,of=1;
+    if(n){var nm=/^([1-9])\/([1-9])$/.exec(n);if(!nm)continue;idx=+nm[1];of=+nm[2];if(idx>of)continue;}
+    var key=baseCall(r.from||'')+'|'+headField(w,'ts');
+    if(!sets[key]){sets[key]={row:r,of:of,parts:{},got:0};order.push(key);}
+    var s=sets[key];
+    if(of!==s.of||s.parts[idx])continue;      /* a mixed or repeated part */
+    var mi=w.indexOf(' m:');
+    s.parts[idx]=mi>=0?w.slice(mi+3):'';s.got++;
+    if(idx===1)s.row=r;                        /* the head carries title:, tag:, file: */
+  }
+  var byTitle={},list=[];
+  for(i=0;i<order.length;i++){var st=sets[order[i]];
+    if(st.got<st.of||!st.parts[1])continue;    /* a hole: never shown (6.6) */
+    var text=[],k;for(k=1;k<=st.of;k++)text.push(st.parts[k]);
+    w=st.row.wire||'';
+    var p={id:st.row.id||wireId(w),from:st.row.from||'',ts:st.row.ts||0,
+           title:headField(w,'title'),tags:headField(w,'tag'),file:headField(w,'file'),
+           text:text.join(' '),edited:false,sig:st.row.sig||''};
+    if(p.title){var tk=baseCall(p.from)+'|'+p.title,q=byTitle[tk];
+      if(q){if(q.ts>=p.ts){q.edited=true;continue;}
+            p.edited=true;list.splice(list.indexOf(q),1);}
+      byTitle[tk]=p;}
+    list.push(p);
+  }
+  list.sort(function(a,b){return b.ts-a.ts;});
+  return list;
+}
+/* "Blog (2)" while there are posts this browser has not looked at. */
+function blogLabel(){
+  var n=0,i;for(i=0;i<blogs.length;i++)if(!blogSeen[blogs[i].id])n++;
+  return 'Blog'+(n?' <span class="cnt">('+n+')</span>':'');
+}
+function markBlogSeen(){
+  var i;blogSeen={};for(i=0;i<blogs.length;i++)blogSeen[blogs[i].id]=1;
+  stSet('xprs_blog_seen',JSON.stringify(blogSeen));}
+/* The posts as cards: the slug read as words (18.1 keeps the human title in
+ * the text, and the wire has only the label), the text, who and when. */
+function blogCards(){
+  var h='',now=Math.floor(Date.now()/1000),i,shown=0;
+  for(i=0;i<blogs.length;i++){var p=blogs[i];
+    if(modRemoved[p.id]||modAway[baseCall(p.from)])continue;
+    shown++;
+    var badge=p.sig==='verified'?'<span class="badge ok">signed</span>':
+              (p.sig==='none'?'<span class="badge bad">unsigned</span>':'');
+    h+='<div class="alert post" data-id="'+esc(p.id)+'">'+
+      '<div class="l1"><span>'+esc(p.title?p.title.replace(/-/g,' '):'untitled')+'</span>'+badge+
+      (p.edited?'<span class="pill">edited</span>':'')+
+      '<span class="sp"></span><span class="when">'+(p.ts?esc(ago(now-p.ts))+' ago':'')+'</span></div>'+
+      '<div class="body">'+esc(p.text)+'</div>'+
+      '<div class="l2">'+callLink(p.from)+
+      (p.tags?p.tags.split(',').map(function(t){return '<span class="pill">'+esc(t)+'</span>';}).join(''):'')+
+      (p.file?'<span class="pill" title="'+esc(p.file)+'">&#128206; '+esc(p.file.split('.').pop())+'</span>':'')+
+      '</div></div>';
+  }
+  if(!shown)return '<div class="card"><div class="empty">No posts yet. A post is an XPRS <code>t:blog</code> packet, published from the app.</div></div>';
+  return h;
+}
+/* The feed in the conversation column (the Blog entry on the left), and the
+ * count beside it. The chat tick is three seconds; a post is not, so the
+ * station is asked at most every fifteen unless the visitor just opened it. */
+function loadBlogFeed(force){
+  var t=Date.now();
+  if(!force&&t-blogAt<15000)return;
+  blogAt=t;
+  getJSON('/api/xprs/history?kind=blog&limit=200',function(d){
+    if(!d||!d.rows)return;
+    if(d.moderation)applyModeration(d.moderation);
+    blogs=blogPosts(d.rows);
+    if(curRoom==='blog'){markBlogSeen();el('msgs').innerHTML=blogCards();}
+    var b=el('blogroom');if(b)b.innerHTML=blogLabel();
+  });
+}
 // ---- alerts (XPRS.md 10.10.2): the warnings and notices the station holds --
 var alerts={},alertsSeen={},alertTimer=null,alertPolicy='moderators';
 try{var _as=stGet('xprs_alerts_seen');if(_as)alertsSeen=JSON.parse(_as);}catch(e){}
@@ -2616,8 +2722,8 @@ function adminRelease(){
   getJSON('/api/services',applyServices);
   /* The alerts count in the tab, whatever tab is open: once, then every
      thirty seconds (one small request; an alert read late is worth less). */
-  pollAlerts();
-  alertTimer=setInterval(pollAlerts,30000);
+  pollAlerts();loadBlogFeed();
+  alertTimer=setInterval(function(){pollAlerts();loadBlogFeed();},30000);
   /* An extension injects `window.nostr` a moment after the page starts:
      look for it for 3 s. Chosen before: use it. Declined before: the page's
      key. Never asked: ask. No extension: the page's key, made now if new. */
