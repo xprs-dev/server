@@ -871,14 +871,14 @@ function snack(t){
 function goHome(){closeMenu();if(tab!=='chat')showTab('chat');switchRoom('local');}
 // ---- the station's banner: its administrator's HTML, under the header ----
 // Open for every visitor until they minimize it to its first line; the
-// choice is kept on this browser (xprs_banner). A station that has no
-// banner of its own gets the page's text; one set to no text shows none.
+// choice is kept on this browser (xprs_banner). A station without one
+// shows none.
 var bannerHtml='',bannerDrawn='';
 function bannerMin(){return stGet('xprs_banner')==='min';}
 function drawBanner(){
   var b=el('banner');
   if(!b)return;
-  var html=bannerHtml===''?BANNER_DEFAULT:bannerHtml;
+  var html=bannerHtml;
   if(html!==bannerDrawn){el('bn-body').innerHTML=html;bannerDrawn=html;}
   var has=!!html.replace(/<[^>]*>/g,'').trim()||/<img|<svg/i.test(html);
   b.className=!has?'hide':bannerMin()?'min':'';
@@ -2306,9 +2306,8 @@ function drawAdmin(d){
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
     h+='<h3>Banner</h3><div class="card">'+
-      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor">'+esc(s.page_banner||BANNER_DEFAULT)+'</textarea>'+
-      '<div class="frow"><span class="lead">Empty shows the page&rsquo;s own text; <code>&lt;!-- none --&gt;</code> shows nothing.</span><span class="sp"></span>'+
-      '<button class="act quiet" onclick="el(\'ad-banner\').value=BANNER_DEFAULT">Default</button>'+
+      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.page_banner||'')+'</textarea>'+
+      '<div class="frow"><span class="sp"></span>'+
       '<button class="act primary" onclick="adminSet({page_banner:el(\'ad-banner\').value})">Save</button></div></div>';
     h+='<h3>Look</h3><div class="card">'+
       '<label class="lead">Logo: HTML in place of the XPRS lettering, an image or text</label>'+
@@ -3117,10 +3116,6 @@ function loadMyRole(){
   });
 }
 var adminInvitedSaid=false,isStationAdmin=false,stationHasAdmin=false;
-/* What a station shows until its administrator writes their own. */
-var BANNER_DEFAULT='<strong>This is an XPRS station.</strong> It relays short messages over radio and the internet for the area it reaches. '+
-  'Local, Regional and Global are its chat rooms; Alerts carries warnings for the area; Blog and Forum keep what people wrote. '+
-  'Everything here is public and signed with a key this page made for you: keep it (menu, top right) and you stay the same callsign on every station.';
 function tsAt(ms){
   var d=new Date(ms),p=function(n){return (n<10?'0':'')+n;};
   return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+
