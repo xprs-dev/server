@@ -195,6 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 #msgs .composer{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 #msgs .composer .frow .grow{min-width:120px}
 #msgs .composer textarea{min-height:110px;resize:vertical}
+#ad-css{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap}
 .themes{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 10px}
 .theme{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:2px solid transparent;
        font:inherit;font-size:13px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)}
@@ -905,8 +906,17 @@ var LOGO_DEFAULT='XPRS';
  * it comes. Picking one previews it here and fills the stylesheet, which
  * Save then stores as page_css like any hand-written one. */
 var THEMES=[
-  {name:'Orange retro',sw:['#101010','#ffa86a','#f0f0f0'],css:''},
+  {name:'Orange retro',sw:['#101010','#ffa86a','#f0f0f0'],css:
+    '/* Orange retro: the page as it comes. Every colour it uses; change any and Save. */\n'+
+    ':root{--accent:#ffa86a;--bg:#101010;--text:#f0f0f0;--muted:#888;--border:rgba(255,240,224,.125);\n'+
+    '  --panel:#151515;--field:#1b1b1b;--line:#1c1c1c;--dim:#555;--placeholder:#666;--on-accent:#101010;\n'+
+    '  --accent-soft:rgba(255,168,106,.12);--hover:rgba(255,255,255,.06);--own:#2a1c10;--own-border:rgba(255,168,106,.35);\n'+
+    '  --banner:#121212;--snack:#333;--snack-text:#fff;--radius:10px}\n'+
+    '/* --accent: links, the active room, buttons.  --bg: the page.  --text, --muted, --dim: words, quieter words, headings.\n'+
+    '   --panel: cards and menus.  --field: inputs and other people\'s bubbles.  --own: your bubbles.  --line, --border: edges.\n'+
+    '   --on-accent: text on a button.  --radius: card corners.  Anything else of the page can be styled below. */'},
   {name:'Clean dark',sw:['#0f1115','#7fb0ff','#e8eaf0'],css:
+    '/* Clean dark */\n'+
     ':root{--accent:#7fb0ff;--bg:#0f1115;--text:#e8eaf0;--muted:#8b93a7;--border:rgba(200,210,255,.14);\n'+
     '  --panel:#171a21;--field:#1d2129;--line:#20242d;--dim:#5b6275;--placeholder:#6c7489;--on-accent:#0b1020;\n'+
     '  --accent-soft:rgba(127,176,255,.12);--own:#1a2538;--own-border:rgba(127,176,255,.4);--banner:#13161c;--radius:12px}\n'+
@@ -914,6 +924,7 @@ var THEMES=[
     '  letter-spacing:4px;transform:none;margin-top:0}\n'+
     'body{background:radial-gradient(1200px 600px at 20% -10%,#1a2033 0%,var(--bg) 60%)}.msg .bubble{border-radius:14px}'},
   {name:'Cyberpunk',sw:['#07030d','#ff2bd6','#e6f7ff'],css:
+    '/* Cyberpunk */\n'+
     ':root{--accent:#ff2bd6;--bg:#07030d;--text:#e6f7ff;--muted:#8a7fa8;--border:rgba(0,240,255,.28);\n'+
     '  --panel:#120a1e;--field:#170d26;--line:#241537;--dim:#5e5080;--placeholder:#6a5f8a;--on-accent:#07030d;\n'+
     '  --accent-soft:rgba(255,43,214,.14);--own:#2a0a3a;--own-border:rgba(255,43,214,.5);--banner:#0d0716;--radius:4px}\n'+
@@ -924,6 +935,7 @@ var THEMES=[
     'body{background:radial-gradient(900px 500px at 85% 110%,#2a0a3a 0%,var(--bg) 55%),radial-gradient(700px 400px at 0% 0%,#06202a 0%,var(--bg) 60%)}\n'+
     '.tabs{border-bottom-color:rgba(0,240,255,.35)}#side .roomhead,h3{color:#00b7c4;letter-spacing:2px}'},
   {name:'Rose',sw:['#0a0a0b','#ff5fa8','#f5f2f4'],css:
+    '/* Rose */\n'+
     ':root{--accent:#ff5fa8;--bg:#0a0a0b;--text:#f5f2f4;--muted:#9a8f95;--border:rgba(255,95,168,.22);\n'+
     '  --panel:#141214;--field:#1b181b;--line:#242024;--dim:#6e6369;--placeholder:#7d7077;--on-accent:#140810;\n'+
     '  --accent-soft:rgba(255,95,168,.14);--hover:rgba(255,95,168,.08);--own:#ff5fa8;--own-border:#ff8cc4;\n'+
@@ -935,6 +947,7 @@ var THEMES=[
     '.tabs button.on{text-shadow:0 0 10px rgba(255,95,168,.5)}#side .room.on{background:rgba(255,95,168,.1)}\n'+
     '.input-area input{border-color:rgba(255,95,168,.3)}.input-area input:focus{box-shadow:0 0 0 2px rgba(255,95,168,.25)}'},
   {name:'Paper',sw:['#fafaf7','#2f6fdb','#1f2328'],css:
+    '/* Paper */\n'+
     ':root{--accent:#2f6fdb;--bg:#fafaf7;--text:#1f2328;--muted:#6b7280;--border:rgba(0,0,0,.12);\n'+
     '  --panel:#ffffff;--field:#f3f4f1;--line:#e8e8e3;--dim:#9aa0a6;--placeholder:#a0a6ad;--on-accent:#ffffff;\n'+
     '  --accent-soft:rgba(47,111,219,.1);--hover:rgba(0,0,0,.04);--own:#e8f0fe;--own-border:rgba(47,111,219,.35);\n'+
@@ -942,6 +955,7 @@ var THEMES=[
     '.card,.alert{box-shadow:0 1px 3px rgba(0,0,0,.06)}.header .logo{color:#1f2328}\n'+
     '.badge.ok{background:#e3f6e8;color:#2e7d4f}.badge.bad{background:#fde0e0;color:#b3261e}.msg .bubble{border-color:var(--line)}'},
   {name:'Forest',sw:['#0e1a12','#8fd18b','#e6efe6'],css:
+    '/* Forest */\n'+
     ':root{--accent:#8fd18b;--bg:#0e1a12;--text:#e6efe6;--muted:#7f9a84;--border:rgba(143,209,139,.18);\n'+
     '  --panel:#15241a;--field:#1a2c20;--line:#1d3022;--dim:#567a5e;--placeholder:#5f8266;--on-accent:#0b1a0f;\n'+
     '  --accent-soft:rgba(143,209,139,.12);--own:#1f3a26;--own-border:rgba(143,209,139,.4);--banner:#122017;--radius:12px}\n'+
@@ -951,13 +965,15 @@ var THEMES=[
 function themeChips(cur){
   var h='',i;
   for(i=0;i<THEMES.length;i++){var t=THEMES[i];
-    h+='<button type="button" class="theme'+(cur===t.css?' on':'')+'" onclick="pickTheme('+i+')" '+
+    h+='<button type="button" class="theme'+(cur===t.css||cur===prettyCss(t.css)?' on':'')+'" onclick="pickTheme('+i+')" '+
       'style="background:'+t.sw[0]+';color:'+t.sw[2]+'"><span class="sw" style="background:'+t.sw[1]+'"></span>'+esc(t.name)+'</button>';
   }
   return h;
 }
+/* One property a line, so the block reads and edits as a list. */
+function prettyCss(css){return css.replace(/;\s*(--[a-z-]+:)/g,';\n  $1').replace(/\{(--[a-z-]+:)/g,'{\n  $1').replace(/;\s*\}/g,';\n}');}
 function pickTheme(i){
-  var t=THEMES[i];el('ad-css').value=t.css;applyCss(t.css);
+  var t=THEMES[i];el('ad-css').value=prettyCss(t.css);applyCss(t.css);adminDirty=true;
   el('themes').innerHTML=themeChips(t.css);
 }
 function applyCss(css){
@@ -1946,6 +1962,7 @@ function fail(id,what){
 }
 
 function showTab(t){
+  if(tab==='admin'&&t!=='admin')adminDirty=false;
   tab=t;
   var bs=el('tabs').getElementsByTagName('button');
   for(var i=0;i<bs.length;i++)
@@ -2330,9 +2347,13 @@ function loadAdmin(){
   }
   getJSON('/api/admin?session='+encodeURIComponent(sess),function(d){
     if(!d||!d.ok)return fail('v-admin','Administration');
+    if(adminDirty)return; /* something being edited: not drawn over */
     drawAdmin(d);
   });
 }
+/* True while a field in Administration has unsaved text (a theme picked, a
+ * banner half written); cleared by a save or by leaving the view. */
+var adminDirty=false;
 function drawAdmin(d){
   var st=esc(stationCall||d.station||'');
   var h='<div class="card"><div class="stat">'+
@@ -2376,18 +2397,18 @@ function drawAdmin(d){
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
     h+='<h3>Banner</h3><div class="card">'+
-      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.page_banner||'')+'</textarea>'+
+      '<textarea id="ad-banner" rows="4" oninput="adminDirty=true" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.page_banner||'')+'</textarea>'+
       '<div class="frow"><span class="sp"></span>'+
       '<button class="act primary" onclick="adminSet({page_banner:el(\'ad-banner\').value})">Save</button></div></div>';
     h+='<h3>Look</h3><div class="card">'+
       '<label class="lead">Logo: HTML in place of the XPRS lettering, an image or text</label>'+
-      '<textarea id="ad-logo" rows="2" placeholder="&lt;img src=&quot;https://&hellip;/logo.png&quot; alt=&quot;My station&quot;&gt;">'+esc(s.page_logo||'')+'</textarea>'+
+      '<textarea id="ad-logo" rows="2" oninput="adminDirty=true" placeholder="&lt;img src=&quot;https://&hellip;/logo.png&quot; alt=&quot;My station&quot;&gt;">'+esc(s.page_logo||'')+'</textarea>'+
       '<div class="frow"><span class="sp"></span>'+
       '<button class="act quiet" onclick="el(\'ad-logo\').value=\'\'">Default</button>'+
       '<button class="act primary" onclick="adminSet({page_logo:el(\'ad-logo\').value})">Save</button></div>'+
       '<label class="lead" style="display:block;margin-top:12px">Theme: pick one, or write your own stylesheet below; the colours are custom properties on <code>:root</code></label>'+
       '<div class="themes" id="themes">'+themeChips(s.page_css||'')+'</div>'+
-      '<textarea id="ad-css" rows="6" placeholder=":root{--accent:#6fc3ff}">'+esc(s.page_css||'')+'</textarea>'+
+      '<textarea id="ad-css" rows="14" oninput="adminDirty=true" spellcheck="false" placeholder=":root{--accent:#6fc3ff}">'+esc(s.page_css||'')+'</textarea>'+
       '<div class="frow"><span class="sp"></span>'+
       '<button class="act quiet" onclick="el(\'ad-css\').value=\'\'">Default</button>'+
       '<button class="act primary" onclick="adminSet({page_css:el(\'ad-css\').value})">Save</button></div></div>';
@@ -3121,6 +3142,7 @@ function adminDo(action,extra){
   x.onload=function(){
     var j=null;try{j=JSON.parse(x.responseText);}catch(e){}
     if(x.status===200&&j&&j.ok){
+      adminDirty=false;
       drawAdmin(j);
       snack(action==='claim'?'You are this station\u2019s administrator':
             action==='release'?'Administration given up':
