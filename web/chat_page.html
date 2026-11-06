@@ -2462,6 +2462,33 @@ function drawAdmin(d){
       radio('ad-alert','everyone',wa,'Anyone may post an alert',
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
+    /* The mesh (docs/plan-mesh-trust.md): how far away a kind may come from
+     * and still be kept, whose words are fetched from anywhere, and which
+     * stations this one exchanges records with. */
+    var reach=function(id,cur,what){
+      return '<div class="frow"><span class="lead" style="min-width:180px">'+what+'</span>'+
+        '<select id="'+id+'" onchange="adminSet({'+id+':this.value})">'+
+        ['local','regional','global'].map(function(v){return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+
+          (v==='local'?'Local: this network only':v==='regional'?'Local and regional: radio in range':'Global: the internet too')+'</option>';}).join('')+
+        '</select></div>';};
+    h+='<h3>Mesh</h3><div class="card">'+
+      '<p class="lead">How far away an alert, a post or a message may come from and still be kept here, shown and relayed. '+
+      'Chat is a conversation; alerts and posts are a record, so they stop at the radio unless you say otherwise.</p>'+
+      reach('reach_alerts',s.reach_alerts||'regional','Alerts')+
+      reach('reach_posts',s.reach_posts||'regional','Posts')+
+      reach('reach_chat',s.reach_chat||'global','Chat')+
+      '<div class="frow" style="margin-top:14px"><span class="lead" style="min-width:180px">Followed</span>'+
+      '<input id="ad-follow" class="grow" oninput="adminDirty=true" placeholder="Callsigns or npubs, separated by spaces" value="'+esc(s.follow||'')+'" style="text-transform:none">'+
+      '<button class="act primary" onclick="adminSet({follow:el(\'ad-follow\').value})">Save</button></div>'+
+      '<p class="lead">Their posts and alerts are kept from anywhere they come, and fetched from their own station across the internet.</p>'+
+      '<div class="frow" style="margin-top:14px">'+
+      radio('ad-peers','open',s.peers_mode||'open','Open mesh','Records are exchanged with any station in reach.',"adminSet({peers_mode:'open'})")+
+      radio('ad-peers','named',s.peers_mode||'open','Trusted stations only',
+        'Records are exchanged with the stations named below and nobody else; an alert or a post heard on the radio is kept only when it came from or through one of them.',
+        "adminSet({peers_mode:'named'})")+'</div>'+
+      '<div class="frow"><span class="lead" style="min-width:180px">Trusted stations</span>'+
+      '<input id="ad-peers-list" class="grow" oninput="adminDirty=true" placeholder="Station callsigns, e.g. X3ABCD X3EFGH" value="'+esc(s.peers||'')+'" style="text-transform:uppercase">'+
+      '<button class="act primary" onclick="adminSet({peers:el(\'ad-peers-list\').value})">Save</button></div></div>';
     h+='<h3>Banner</h3><div class="card">'+
       '<textarea id="ad-banner" rows="4" oninput="adminDirty=true" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.page_banner||'')+'</textarea>'+
       '<div class="frow"><span class="sp"></span>'+

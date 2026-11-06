@@ -33,6 +33,8 @@ import 'package:xprs_core/src/services/receive/packet_gateway.dart';
 import 'package:xprs_core/src/services/reticulum/rns_service.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_mirror.dart';
+import 'package:xprs_core/src/services/xprs/xprs_digipeat.dart';
+import 'package:xprs_core/src/services/xprs/xprs_mesh_policy.dart';
 import 'package:xprs_core/src/services/xprs/xprs_history_server.dart';
 import 'package:xprs_core/src/services/xprs/xprs_ingest.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
@@ -110,8 +112,36 @@ class Station {
   /// serves a hosted room only to whom the web chat API says it is shared
   /// with, and the mirror keeps every shared pair in step with a standing
   /// ask, once a minute at most, through the hooks the mesh already set.
+  /// The administrator's mesh settings (docs/plan-mesh-trust.md) become the
+  /// one snapshot the receive door, the digipeater and the history server
+  /// read: rebuilt here on boot and whenever the settings change.
+  void _applyMesh(WebChatApi api, Map<String, Object> settings) {
+    final followed = <String>{};
+    for (final c in xprsCallsignList(settings['follow'])) {
+      if (c.startsWith('NPUB1')) {
+        try {
+          followed.add('X1${NostrCrypto.deriveCallsign(NostrCrypto.decodeNpub(c.toLowerCase()))}');
+        } catch (_) {
+          // not an npub after all: the API checked the shape, not the checksum
+        }
+      } else {
+        followed.add(c);
+      }
+    }
+    final policy = XprsMeshPolicy.fromSettings(settings, followed: followed);
+    XprsIngest.mesh = policy;
+    XprsArchive.instance.followed = followed;
+    XprsDigipeater.admits = XprsIngest.meshAdmits;
+    XprsHistoryServer.trusted = policy.named ? policy.peers.contains : null;
+    LogService.instance.add('server: mesh reach alerts=${settings['reach_alerts']} '
+        'posts=${settings['reach_posts']} chat=${settings['reach_chat']} '
+        'peers=${policy.named ? policy.peers.join(',') : 'open'} followed=${followed.length}');
+  }
+
   void _wireSharedRooms(FileKeyValueStore store) {
     final api = _api ??= _webChatApi();
+    _applyMesh(api, api.settings);
+    api.onSettings = (s) => _applyMesh(api, s);
     XprsHistoryServer.instance.hostedRoom = api.roomServable;
     XprsHistoryServer.instance.roomPeers = api.roomPeers;
     final mirror = XprsGroupMirror.instance;
