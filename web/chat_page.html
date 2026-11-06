@@ -336,7 +336,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 /* Tabs. The station shows seven panels on its own screen; the phone on the
    hotspot gets the same material in five, chat first because that is what
    somebody who just joined an open AP came for. */
-.tabs{display:flex;border-bottom:1px solid var(--border);overflow-x:auto}
+/* The views (Traffic, Devices, Station, Stats, Settings, Administration) open
+   from the menu; the logo or the menu's Chat leads back. */
+.tabs{display:none}
 .tabs button{flex:1 0 auto;background:none;border:0;color:var(--muted);
   font:inherit;font-size:12px;padding:7px 12px;cursor:pointer;
   border-bottom:2px solid transparent;white-space:nowrap}
@@ -384,9 +386,17 @@ h3:first-child{margin-top:0}
 img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)}
 @keyframes fadein{from{bottom:0;opacity:0}to{bottom:60px;opacity:1}}
 @keyframes fadeout{from{bottom:60px;opacity:1}to{bottom:0;opacity:0}}
-</style></head><body>
+</style>
+<script>
+/* The station's stylesheet, logo and banner as this browser last saw them
+   (page_css, page_logo, page_banner), applied before the first paint so a
+   station in its own look does not flash the default for the second the
+   services answer takes. The answer then confirms or replaces them. */
+(function(){try{var c=localStorage.getItem('xprs_css');if(c){var s=document.createElement('style');s.id='st-css';s.textContent=c;document.head.appendChild(s);}}catch(e){}})();
+</script></head><body>
 <div class="header">
-  <span class="logo" id="logo" onclick="goHome()" title="Chat">XPRS</span><span class="stcall" id="stcall" title="the station you are using"></span>
+  <span class="logo" id="logo" onclick="goHome()" title="Chat">XPRS</span>
+  <script>(function(){try{var l=localStorage.getItem('xprs_logo');if(l){var e=document.getElementById('logo');e.innerHTML=l;e.className='logo own';}}catch(e){}})();</script><span class="stcall" id="stcall" title="the station you are using"></span>
   <div class="menu">
     <span class="my-callsign" id="call"></span>
     <button class="menu-btn" onclick="toggleMenu()">&#9776;</button>
@@ -399,6 +409,9 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
       <button onclick="importNsec()">Import another nsec</button>
       <button onclick="newIdentity()">New identity</button>
       <div class="menu-sec">This station</div>
+      <button onclick="closeMenu();goHome()">Chat</button>
+      <button data-view="traffic" onclick="openView('traffic')">Traffic</button>
+      <button data-view="devices" onclick="openView('devices')">Devices</button>
       <button data-view="station" onclick="openView('station')">Station</button>
       <button data-view="stats" onclick="openView('stats')">Stats</button>
       <button data-view="settings" onclick="openView('settings')">Settings</button>
@@ -423,11 +436,9 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
 </div>
 <div id="banner" class="hide"><div id="bn-body"></div>
   <button class="bn-x" id="bn-x" onclick="bannerToggle()" title="Minimize">&#9652;</button></div>
-<div class="tabs" id="tabs">
-  <button data-tab="chat" class="on" onclick="showTab('chat')">Chat</button>
-  <button data-tab="traffic" onclick="showTab('traffic')">Traffic</button>
-  <button data-tab="devices" onclick="showTab('devices')">Devices</button>
-</div>
+<script>(function(){try{var b=localStorage.getItem('xprs_banner_html'),m=localStorage.getItem('xprs_banner')==='min';
+  if(b){document.getElementById('bn-body').innerHTML=b;document.getElementById('banner').className=m?'min':'';
+    document.getElementById('bn-x').innerHTML=m?'&#9662;':'&#9652;';}}catch(e){}})();</script>
 <div id="content">
   <div id="chatwrap">
   <div id="side"></div>
@@ -891,6 +902,7 @@ function drawBanner(){
   if(!b)return;
   var html=bannerHtml;
   if(html!==bannerDrawn){el('bn-body').innerHTML=html;bannerDrawn=html;}
+  remember('xprs_banner_html',html);
   var has=!!html.replace(/<[^>]*>/g,'').trim()||/<img|<svg/i.test(html);
   b.className=!has?'hide':bannerMin()?'min':'';
   el('bn-x').innerHTML=bannerMin()?'&#9662;':'&#9652;';
@@ -929,11 +941,11 @@ var THEMES=[
     '  --panel:#120a1e;--field:#170d26;--line:#241537;--dim:#5e5080;--placeholder:#6a5f8a;--on-accent:#07030d;\n'+
     '  --accent-soft:rgba(255,43,214,.14);--own:#2a0a3a;--own-border:rgba(255,43,214,.5);--banner:#0d0716;--radius:4px}\n'+
     '.header{border-bottom:1px solid #00f0ff}.header .logo{color:#00f0ff;text-shadow:0 0 6px #00f0ff,0 0 18px rgba(0,240,255,.6)}\n'+
-    '.tabs button.on,#side .room.on{text-shadow:0 0 8px var(--accent)}\n'+
+    '#side .room.on{text-shadow:0 0 8px var(--accent)}\n'+
     '.act.primary,.fab{box-shadow:0 0 14px rgba(255,43,214,.55)}.card,.alert,.msg .bubble{border-radius:4px}\n'+
     '.msg.local .bubble{box-shadow:0 0 10px rgba(255,43,214,.25)}.input-area input:focus{box-shadow:0 0 8px rgba(0,240,255,.5)}\n'+
     'body{background:radial-gradient(900px 500px at 85% 110%,#2a0a3a 0%,var(--bg) 55%),radial-gradient(700px 400px at 0% 0%,#06202a 0%,var(--bg) 60%)}\n'+
-    '.tabs{border-bottom-color:rgba(0,240,255,.35)}#side .roomhead,h3{color:#00b7c4;letter-spacing:2px}'},
+    '#side .roomhead,h3{color:#00b7c4;letter-spacing:2px}'},
   {name:'Rose',sw:['#0a0a0b','#ff5fa8','#f5f2f4'],css:
     '/* Rose */\n'+
     ':root{--accent:#ff5fa8;--bg:#0a0a0b;--text:#f5f2f4;--muted:#9a8f95;--border:rgba(255,95,168,.22);\n'+
@@ -944,7 +956,7 @@ var THEMES=[
     '.msg.local .bubble{color:#140810;font-weight:500;box-shadow:0 2px 12px rgba(255,95,168,.25)}\n'+
     '.msg .bubble,.alert,.card{border-radius:14px}.act,.act.primary,.input-area button:not(.seal),.pill,.badge{border-radius:999px}\n'+
     '.act.primary,.fab,.input-area button:not(.seal){background:linear-gradient(135deg,#ff7fba,#ff4f9e);box-shadow:0 2px 10px rgba(255,95,168,.35)}\n'+
-    '.tabs button.on{text-shadow:0 0 10px rgba(255,95,168,.5)}#side .room.on{background:rgba(255,95,168,.1)}\n'+
+    '#side .room.on{background:rgba(255,95,168,.1)}\n'+
     '.input-area input{border-color:rgba(255,95,168,.3)}.input-area input:focus{box-shadow:0 0 0 2px rgba(255,95,168,.25)}'},
   {name:'Paper',sw:['#fafaf7','#2f6fdb','#1f2328'],css:
     '/* Paper */\n'+
@@ -980,13 +992,17 @@ function applyCss(css){
   var st=el('st-css');
   if(!st){st=document.createElement('style');st.id='st-css';document.head.appendChild(st);}
   if(st.textContent!==css)st.textContent=css;
+  remember('xprs_css',css);
 }
 function applyLogo(html){
   var l=el('logo');if(!l)return;
   var own=!!html.trim();
   if(l.innerHTML!==(own?html:LOGO_DEFAULT))l.innerHTML=own?html:LOGO_DEFAULT;
   l.className='logo'+(own?' own':'');
+  remember('xprs_logo',own?html:'');
 }
+/* Kept for the next load's first paint (the script in the head); gone when empty. */
+function remember(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}}
 function toggleMenu(){
   var m=document.getElementById('menu');
   m.className=m.className.indexOf('open')>=0?'menu-panel':'menu-panel open';}
@@ -1488,7 +1504,7 @@ function roomLabel(r){
          r==='social'?'Social':r.slice(3);}
 function renderSide(){
   var el=document.getElementById('side');
-  var htmlp='<div class="roomhead">Rooms</div>';
+  var htmlp='<div class="roomhead">Chat</div>';
   var rooms=['local','regional','global'];
   /* Whoever wrote and was not read yet comes first. */
   var peers=Object.keys(dmPeers).sort(function(a,b){
@@ -1964,9 +1980,6 @@ function fail(id,what){
 function showTab(t){
   if(tab==='admin'&&t!=='admin')adminDirty=false;
   tab=t;
-  var bs=el('tabs').getElementsByTagName('button');
-  for(var i=0;i<bs.length;i++)
-    bs[i].className=bs[i].getAttribute('data-tab')===t?'on':'';
   el('chatwrap').className=t==='chat'?'':'hide';
   var views=['traffic','devices','stats','station','settings','admin'];
   for(var j=0;j<views.length;j++)
