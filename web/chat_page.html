@@ -76,18 +76,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
    weights (outlined, filled, quiet), cards, pills, and roster rows. */
 .view h3{margin:18px 0 8px}
 /* Settings and alerts read as a column, not a banner, on a wide screen. */
-#v-admin>*,#v-alerts>*{max-width:820px;margin-left:auto;margin-right:auto}
+#v-admin>*{max-width:820px;margin-left:auto;margin-right:auto}
 .card{background:#151515;border:1px solid var(--border);border-radius:10px;
       padding:12px 14px;margin:0 0 10px}
 .card h4{font-size:14px;font-weight:bold;margin:0 0 8px}
 .lead{font-size:13px;color:var(--muted);line-height:1.45}
-.view input:not([type=radio]):not([type=checkbox]),.view select,.card input:not([type=radio]):not([type=checkbox]){
+.view input:not([type=radio]):not([type=checkbox]),.view select,.card select,.card input:not([type=radio]):not([type=checkbox]){
       background:#1b1b1b;color:var(--text);border:1px solid var(--border);
       border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;
       min-height:36px;outline:none;max-width:100%}
-.view input:focus,.view select:focus,.card input:focus{border-color:var(--accent)}
+.view input:focus,.view select:focus,.card select:focus,.card input:focus{border-color:var(--accent)}
 .view input::placeholder,.card input::placeholder{color:#666}
-.view select{-webkit-appearance:none;appearance:none;padding-right:30px;cursor:pointer;
+.view select,.card select{-webkit-appearance:none;appearance:none;padding-right:30px;cursor:pointer;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23ffa86a' stroke-width='1.6'/%3E%3C/svg%3E");
       background-repeat:no-repeat;background-position:right 10px center}
 .view select:disabled{opacity:.45;cursor:default}
@@ -149,6 +149,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 #side .room .cnt{color:var(--accent);font-weight:bold}
 #side .room.unread{color:var(--text);font-weight:bold}
 #msgs.alerts{display:block}
+#msgs.alerts>*{max-width:820px;width:100%;box-sizing:border-box;margin-left:auto;margin-right:auto}
 #msgs.alerts .alert{max-width:820px;margin-left:auto;margin-right:auto}
 #side .room .lock{font-size:10px;margin-left:4px}
 /* The room's note sits at the top, as a small chip, and the conversation
@@ -179,13 +180,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 /* A feed (Alerts, Blog, Forum) is read, not chatted in: no composer bar. What
    there is to add goes through the round + at the bottom right. */
 #chatcol.feed .input-area,#chatcol.feed #replybar{display:none}
-.fab{position:absolute;right:18px;bottom:calc(18px + var(--sab));width:52px;height:52px;
-     border-radius:50%;border:none;background:var(--accent);color:#101010;font-size:30px;
-     line-height:52px;padding:0;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.5);z-index:5;
-     font-family:'Wartext',sans-serif;font-weight:bold}
+.fab{position:absolute;right:18px;bottom:calc(34px + var(--sab));width:52px;height:52px;
+     border-radius:50%;border:none;background:var(--accent);color:#101010;
+     padding:0;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.5);z-index:5;
+     display:flex;align-items:center;justify-content:center}
+.fab svg{width:22px;height:22px;display:block}
 .fab:hover{background:#ffb985}
 .fab.hide{display:none}
-#msgs .composer{border-color:var(--accent)}
+#msgs .composer{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,168,106,.12)}
+#msgs .composer .frow .grow{min-width:120px}
+#msgs .composer textarea{min-height:110px;resize:vertical}
+/* The station's banner (its administrator's HTML), under the header. */
+#banner{border-bottom:1px solid var(--border);padding:8px 44px 8px 12px;font-size:13px;
+        line-height:1.45;max-height:28vh;overflow:auto;position:relative;background:#121212}
+#banner.hide{display:none}
+#banner a{color:var(--accent)}
+#banner .bn-x{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;
+        border:1px solid var(--border);color:var(--muted);border-radius:4px;width:26px;height:26px;
+        cursor:pointer;font-size:14px;line-height:1}
+#banner .bn-x:hover{color:var(--text);border-color:var(--text)}
+/* A phone held sideways has no height to spare: one line, cut with an ellipsis. */
+@media (max-height:480px) and (orientation:landscape){
+  #banner{padding-top:5px;padding-bottom:5px;font-size:12px;white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis;max-height:none}
+  #banner #bn-body{overflow:hidden;text-overflow:ellipsis}
+}
+.header .logo{cursor:pointer}
 .cat{cursor:pointer}
 .cat:hover{border-color:var(--accent)}
 .cat .l1{text-transform:none}
@@ -347,7 +367,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
 @keyframes fadeout{from{bottom:60px;opacity:1}to{bottom:0;opacity:0}}
 </style></head><body>
 <div class="header">
-  <span class="logo">XPRS</span><span class="stcall" id="stcall" title="the station you are using"></span>
+  <span class="logo" onclick="goHome()" title="Chat">XPRS</span><span class="stcall" id="stcall" title="the station you are using"></span>
   <div class="menu">
     <span class="my-callsign" id="call"></span>
     <button class="menu-btn" onclick="toggleMenu()">&#9776;</button>
@@ -363,11 +383,11 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
       <button data-view="station" onclick="openView('station')">Station</button>
       <button data-view="stats" onclick="openView('stats')">Stats</button>
       <button data-view="settings" onclick="openView('settings')">Settings</button>
-      <button id="alertbtn" data-view="alerts" style="display:none" onclick="openView('alerts')">Post an alert</button>
       <button id="adminbtn" style="display:none" onclick="openView('admin')">Administration</button>
       <div class="menu-sec">This page</div>
       <button onclick="clearChat()">Clear chat view</button>
       <button onclick="toggleSound()" id="sndbtn">Sound: on</button>
+      <button onclick="bannerToggle()" id="bnbtn" style="display:none">Hide banner</button>
     </div>
   </div>
 </div>
@@ -383,6 +403,8 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
     </div>
   </div>
 </div>
+<div id="banner" class="hide"><div id="bn-body"></div>
+  <button class="bn-x" onclick="bannerToggle()" title="Hide the banner">&#10005;</button></div>
 <div class="tabs" id="tabs">
   <button data-tab="chat" class="on" onclick="showTab('chat')">Chat</button>
   <button data-tab="traffic" onclick="showTab('traffic')">Traffic</button>
@@ -393,7 +415,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
   <div id="side"></div>
   <div id="chatcol">
     <div class="messages" id="msgs"></div>
-    <button id="fab" class="fab hide" onclick="fabClick()" aria-label="New">+</button>
+    <button id="fab" class="fab hide" onclick="fabClick()" aria-label="New"><svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke="#101010" stroke-width="3" stroke-linecap="round" fill="none"/></svg></button>
     <div class="status-bar">
       <span id="stat">connecting</span>
       <a id="getapp" class="hide" href="/app">Get the app</a>
@@ -415,7 +437,6 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
   <div class="view hide" id="v-station">loading&hellip;</div>
   <div class="view hide" id="v-settings"></div>
   <div class="view hide" id="v-admin"></div>
-  <div class="view hide" id="v-alerts"></div>
 </div>
 <div class="snackbar" id="snack"></div>
 <div id="msgmenu"></div>
@@ -839,6 +860,22 @@ function snack(t){
   var s=document.getElementById('snack');
   s.textContent=t;s.className='snackbar show';
   setTimeout(function(){s.className='snackbar';},3000);}
+/* The logo: back to the conversation, whatever was open. */
+function goHome(){closeMenu();if(tab!=='chat')showTab('chat');switchRoom('local');}
+// ---- the station's banner: its administrator's HTML, under the header ----
+// Shown to every visitor until they hide it; hidden stays hidden on this
+// browser (xprs_banner). The menu shows or hides it again.
+var bannerHtml='',bannerDrawn='';
+function bannerHidden(){return stGet('xprs_banner')==='hide';}
+function drawBanner(){
+  var b=el('banner'),m=el('bnbtn');
+  if(!b)return;
+  if(bannerHtml!==bannerDrawn){el('bn-body').innerHTML=bannerHtml;bannerDrawn=bannerHtml;}
+  var has=!!bannerHtml.replace(/<[^>]*>/g,'').trim()||/<img|<svg/i.test(bannerHtml);
+  b.className=has&&!bannerHidden()?'':'hide';
+  if(m){m.style.display=has?'':'none';m.textContent=bannerHidden()?'Show banner':'Hide banner';}
+}
+function bannerToggle(){closeMenu();stSet('xprs_banner',bannerHidden()?'show':'hide');drawBanner();}
 function toggleMenu(){
   var m=document.getElementById('menu');
   m.className=m.className.indexOf('open')>=0?'menu-panel':'menu-panel open';}
@@ -1767,7 +1804,7 @@ function load(){
 // reply; four phones polling five endpoints each would be the whole budget
 // spent on nobody looking.
 var tab='chat', tabTimer=null;
-var TAB_MS={chat:3000,traffic:5000,devices:5000,stats:60000,station:10000,settings:5000,admin:60000,alerts:15000};
+var TAB_MS={chat:3000,traffic:5000,devices:5000,stats:60000,station:10000,settings:5000,admin:60000};
 
 function el(id){return document.getElementById(id);}
 function esc(t){return String(t==null?'':t)
@@ -1819,7 +1856,7 @@ function showTab(t){
   for(var i=0;i<bs.length;i++)
     bs[i].className=bs[i].getAttribute('data-tab')===t?'on':'';
   el('chatwrap').className=t==='chat'?'':'hide';
-  var views=['traffic','devices','stats','station','settings','admin','alerts'];
+  var views=['traffic','devices','stats','station','settings','admin'];
   for(var j=0;j<views.length;j++)
     el('v-'+views[j]).className='view'+(views[j]===t?'':' hide');
   if(tabTimer)clearInterval(tabTimer);
@@ -1841,7 +1878,6 @@ function tick(){
   else if(tab==='station')loadStation();
   else if(tab==='settings')loadSettings();
   else if(tab==='admin')loadAdmin();
-  else if(tab==='alerts')loadAlerts();
 }
 // Stats, Station and Settings live behind the menu, not in the tab row.
 function openView(t){toggleMenu();showTab(t);}
@@ -2176,7 +2212,9 @@ function applyServices(sv){
   if(p.moderation){canModerate=true;if(sess)loadMyRole();}
   if(p.rooms){canRooms=true;loadRooms();}
   alertPolicy=p.alerts||'moderators';
-  refreshAlertMenu();
+  if(curRoom==='alerts')fabSet(canAlert()?'alert':null);
+  bannerHtml=typeof p.banner==='string'?p.banner:'';
+  drawBanner();
   tidyMenu();
 }
 
@@ -2240,6 +2278,11 @@ function drawAdmin(d){
       radio('ad-alert','everyone',wa,'Anyone may post an alert',
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
+    h+='<h3>Banner</h3><div class="card">'+
+      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor; empty for none">'+esc(s.banner||'')+'</textarea>'+
+      '<div class="frow"><span class="sp"></span>'+
+      '<button class="act quiet" onclick="el(\'ad-banner\').value=BANNER_DEFAULT">Default</button>'+
+      '<button class="act primary" onclick="adminSet({banner:el(\'ad-banner\').value})">Save</button></div></div>';
     h+=drawModeration(d,true);
     if(canRooms)h+=drawRooms();
     h+='<h3>Administrator</h3><div class="card"><div class="frow first">'+
@@ -2488,12 +2531,14 @@ function fabClick(){
   if(!h)return;
   var box=el('msgs');
   box.insertAdjacentHTML('afterbegin','<div id="composer">'+h+'</div>');
+  el('fab').className='fab hide'; /* out of the way of the panel's buttons */
   box.scrollTop=0;
   var first=box.querySelector('#composer input,#composer textarea');
   try{if(first)first.focus();}catch(e){}
 }
 function closeComposer(){
   var c=el('composer');if(c)c.parentNode.removeChild(c);
+  fabSet(fabMode);
   if(curRoom==='alerts')loadAlertsFeed();
   else if(curRoom==='blog')loadBlogFeed(true);
   else if(curRoom==='forum')loadForumIndex(true);
@@ -2502,8 +2547,8 @@ function closeComposer(){
  * up to about 1500 characters, split into parts past one packet (7.6). */
 function blogForm(){
   return '<div class="card composer"><h4>Write a post</h4>'+
-    '<div class="frow first"><input id="bl-title" class="grow" maxlength="60" placeholder="Title (becomes a label: antenna-notes)"></div>'+
-    '<div class="frow"><textarea id="bl-text" maxlength="1600" placeholder="Your post: up to about 1500 characters, signed by you and kept by every station that hears it"></textarea></div>'+
+    '<div class="frow first"><input id="bl-title" class="grow" maxlength="60" placeholder="Title"></div>'+
+    '<div class="frow"><textarea id="bl-text" maxlength="1600" placeholder="Your post"></textarea></div>'+
     '<div class="frow"><span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
     '<button class="act primary" onclick="blogPublish()">Publish</button></div></div>';
 }
@@ -2527,15 +2572,13 @@ function blogPublish(){
  * administrator's to create; the station's key signs it. */
 function categoryForm(){
   return '<div class="card composer"><h4>New forum category</h4>'+
-    '<div class="frow first"><input id="fc-name" class="grow" placeholder="Category name">'+
+    '<div class="frow first"><input id="fc-name" class="grow" placeholder="Name">'+
     '<input id="fc-about" class="grow" placeholder="About (optional)"></div>'+
     '<div class="frow"><select id="fc-vis"><option value="public">Public: everyone reads</option>'+
     '<option value="private">Private: members only</option></select>'+
     '<select id="fc-post"><option value="anyone">Anyone posts</option><option value="members">Members post</option></select>'+
     '<span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
-    '<button class="act primary" onclick="categoryCreate()">Create</button></div>'+
-    '<p class="lead" style="margin-top:10px">A category holds topics and their comments. It stays on this station '+
-    'unless you share it with other stations, in Administration.</p></div>';
+    '<button class="act primary" onclick="categoryCreate()">Create</button></div></div>';
 }
 function categoryCreate(){
   roomCreateFrom('fc-','forum',function(j){
@@ -2557,10 +2600,8 @@ function forumCards(list){
       (hr.about?'<div class="body">'+esc(hr.about)+'</div>':'')+
       '</div>';
   }
-  if(!list.length)h='<div class="card"><div class="empty">No forum categories yet.'+
-    (isStationAdmin?' Press + to create the first.':
-     stationHasAdmin?' The administrator creates them.':
-     ' This station has no administrator yet: claim it in Administration (menu, top right), then create one here.')+
+  if(!list.length)h='<div class="card"><div class="empty">No categories yet.'+
+    (isStationAdmin?'':stationHasAdmin?' The administrator creates them.':' This station has no administrator yet.')+
     '</div></div>';
   return h;
 }
@@ -2578,7 +2619,7 @@ function loadForumIndex(force){
 function forumComposer(){
   var hr=forumRoom(),t=el('txt');
   if(!hr)return;
-  if(!forumTopic){t.disabled=true;t.placeholder='Open a topic to reply, or start one';return;}
+  if(!forumTopic){t.disabled=true;t.placeholder='Open a topic to reply';return;}
   t.disabled=!hr.can_post;
   t.placeholder=hr.can_post?'Reply in '+forumTopic.title.replace(/-/g,' '):
     (!sess?'Prove your key to post (menu, top right)':
@@ -2822,7 +2863,7 @@ function blogCards(){
       (p.file?'<span class="pill" title="'+esc(p.file)+'">&#128206; '+esc(p.file.split('.').pop())+'</span>':'')+
       '</div></div>';
   }
-  if(!shown)return '<div class="card"><div class="empty">No posts yet. Press + to write the first.</div></div>';
+  if(!shown)return '<div class="card"><div class="empty">No posts yet.</div></div>';
   return h;
 }
 /* The feed in the conversation column (the Blog entry on the left), and the
@@ -2861,7 +2902,7 @@ function pollAlerts(cb){
       if(withdrawn[id]||alertUntil(w,r.ts)<now)continue;
       active[id]={id:id,row:r};}
     alerts=active;
-    if(tab==='alerts'||(tab==='chat'&&curRoom==='alerts'))markAlertsSeen();
+    if(tab==='chat'&&curRoom==='alerts')markAlertsSeen();
     var a=el('alertsroom');
     if(a)a.innerHTML=alertsLabel();
     if(cb)cb();
@@ -2873,11 +2914,6 @@ function alertsLabel(){
   for(k in alerts)if(!alertsSeen[k])n++;
   return 'Alerts'+(n?' <span class="cnt">('+n+')</span>':'');
 }
-/* "Post an alert" is in the menu only for somebody this station lets post. */
-function refreshAlertMenu(){
-  var b=el('alertbtn');
-  if(b){b.style.display=canAlert()?'':'none';tidyMenu();}
-}
 function markAlertsSeen(){
   for(var k in alerts)alertsSeen[k]=1;
   stSet('xprs_alerts_seen',JSON.stringify(alertsSeen));}
@@ -2887,16 +2923,16 @@ var ALERT_KINDS=['fire','flood','storm','wind','snow','ice','quake','tsunami','l
 function alertForm(){
   var opts=function(a){var o='';for(var i=0;i<a.length;i++)o+='<option value="'+a[i][0]+'"'+(a[i][2]?' selected':'')+'>'+a[i][1]+'</option>';return o;};
   var kinds=[];for(var i=0;i<ALERT_KINDS.length;i++)kinds.push([ALERT_KINDS[i],ALERT_KINDS[i].charAt(0).toUpperCase()+ALERT_KINDS[i].slice(1)]);
-  return '<div class="card" id="alertform"><h4>Post an alert</h4>'+
+  return '<div class="card composer"><h4>Post an alert</h4>'+
     '<div class="frow first">'+
     '<select id="al-type" onchange="el(\'al-sev\').style.display=this.value===\'info\'?\'none\':\'\'">'+
       opts([['warning','Warning: a hazard'],['info','Notice: worth knowing']])+'</select>'+
     '<select id="al-kind">'+opts(kinds)+'</select>'+
     '<select id="al-sev">'+opts([['watch','Watch: be ready'],['warning','Warning: act now'],['danger','Danger: leave']])+'</select>'+
     '<select id="al-hours">'+opts([['1','For an hour'],['6','For 6 hours'],['24','For a day',1],['72','For 3 days']])+'</select></div>'+
-    '<div class="frow"><input id="al-text" class="grow" placeholder="What is happening">'+
-    '<button class="act primary" onclick="postAlert()">Post</button></div>'+
-    '<p class="lead" style="margin-top:10px">Signed by you as an XPRS warning or notice: everyone in reach of this station sees it.</p></div>';
+    '<div class="frow"><input id="al-text" class="grow" placeholder="What is happening"></div>'+
+    '<div class="frow"><span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
+    '<button class="act primary" onclick="postAlert()">Post</button></div></div>';
 }
 /* The alerts, newest first, as cards. */
 function alertCards(){
@@ -2926,13 +2962,6 @@ function alertCards(){
   return h;
 }
 /* The window behind the menu: the form, then the alerts. */
-function loadAlerts(){
-  pollAlerts(function(){
-    el('v-alerts').innerHTML=(canAlert()?alertForm():
-      '<div class="card"><p class="lead">On this station only the moderators and the administrator post alerts.</p></div>')+
-      '<h3>Active alerts</h3>'+alertCards();
-  });
-}
 /* The feed in the conversation column (the Alerts entry on the left). */
 function loadAlertsFeed(){
   pollAlerts(function(){
@@ -2955,8 +2984,8 @@ function postAlert(){
     if(u8(w).length>250)return snack('Too long');
     postWire(w,function(ok,why2){
       if(!ok)return snack(why2||'The station refused it');
-      snack('Alert posted');el('al-text').value='';closeComposer();
-      setTimeout(function(){loadAlerts();if(curRoom==='alerts')loadAlertsFeed();},800);
+      snack('Alert posted');closeComposer();
+      setTimeout(function(){if(curRoom==='alerts')loadAlertsFeed();},800);
     });
   });
 }
@@ -2966,7 +2995,7 @@ function withdrawAlert(id,typ){
     if(!w)return snack('Not signed');
     postWire(w,function(ok,why){
       if(!ok)return snack(why||'The station refused it');
-      snack('Withdrawn');setTimeout(function(){if(tab==='alerts')loadAlerts();if(curRoom==='alerts')loadAlertsFeed();},800);
+      snack('Withdrawn');setTimeout(function(){if(curRoom==='alerts')loadAlertsFeed();},800);
     });
   });
 }
@@ -2993,7 +3022,8 @@ function adminDo(action,extra){
   x.onerror=x.ontimeout=function(){snack('The station did not answer');};
   x.send(JSON.stringify(b));
 }
-function adminSet(settings){adminDo('set',{settings:settings});}
+function adminSet(settings){adminDo('set',{settings:settings});
+  if(typeof settings.banner==='string'){bannerHtml=settings.banner;drawBanner();}}
 
 // ---- moderation of this station's rooms (XPRS.md 10.10) --------------------
 //
@@ -3033,7 +3063,6 @@ function loadMyRole(){
     if(curRoom==='forum')fabSet(isStationAdmin?'category':null);
     if(curRoom==='alerts')fabSet(canAlert()?'alert':null);
     myOffer=d.offer||'';
-    refreshAlertMenu();
     if(myStationRole==='invited'&&myOffer&&!adminInvitedSaid){
       adminInvitedSaid=true;
       snack('You were asked to moderate '+stationCall+': see Administration');
@@ -3041,6 +3070,8 @@ function loadMyRole(){
   });
 }
 var adminInvitedSaid=false,isStationAdmin=false,stationHasAdmin=false;
+/* What a station shows until its administrator writes their own. */
+var BANNER_DEFAULT='<strong>Welcome to this station.</strong> Operated by <em>your name</em> from <em>your town</em>. Local chat, alerts, posts and a forum for the area it reaches.';
 function tsAt(ms){
   var d=new Date(ms),p=function(n){return (n<10?'0':'')+n;};
   return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+
