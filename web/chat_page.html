@@ -210,6 +210,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
   #banner.min{padding-top:3px;padding-bottom:3px}
 }
 .header .logo{cursor:pointer}
+/* A logo of the station's own: an image fits the header's height. */
+.header .logo img,.header .logo svg{height:30px;max-width:180px;display:block;margin-top:14px;transform:scaleY(1.39)}
+.header .logo.own{letter-spacing:0;transform:none;margin-top:0;font-size:22px;display:flex;align-items:center;height:40px}
+.header .logo.own img,.header .logo.own svg{margin-top:0;transform:none}
 .cat{cursor:pointer}
 .cat:hover{border-color:var(--accent)}
 .cat .l1{text-transform:none}
@@ -371,7 +375,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
 @keyframes fadeout{from{bottom:60px;opacity:1}to{bottom:0;opacity:0}}
 </style></head><body>
 <div class="header">
-  <span class="logo" onclick="goHome()" title="Chat">XPRS</span><span class="stcall" id="stcall" title="the station you are using"></span>
+  <span class="logo" id="logo" onclick="goHome()" title="Chat">XPRS</span><span class="stcall" id="stcall" title="the station you are using"></span>
   <div class="menu">
     <span class="my-callsign" id="call"></span>
     <button class="menu-btn" onclick="toggleMenu()">&#9776;</button>
@@ -883,6 +887,20 @@ function drawBanner(){
   b.onclick=bannerMin()?bannerToggle:null;
 }
 function bannerToggle(){stSet('xprs_banner',bannerMin()?'open':'min');drawBanner();}
+// ---- the station's own look: a stylesheet and a logo, the administrator's
+// (page_css and page_logo, reported as page.css and page.logo). ----
+var LOGO_DEFAULT='XPRS';
+function applyCss(css){
+  var st=el('st-css');
+  if(!st){st=document.createElement('style');st.id='st-css';document.head.appendChild(st);}
+  if(st.textContent!==css)st.textContent=css;
+}
+function applyLogo(html){
+  var l=el('logo');if(!l)return;
+  var own=!!html.trim();
+  if(l.innerHTML!==(own?html:LOGO_DEFAULT))l.innerHTML=own?html:LOGO_DEFAULT;
+  l.className='logo'+(own?' own':'');
+}
 function toggleMenu(){
   var m=document.getElementById('menu');
   m.className=m.className.indexOf('open')>=0?'menu-panel':'menu-panel open';}
@@ -2222,6 +2240,8 @@ function applyServices(sv){
   if(curRoom==='alerts')fabSet(canAlert()?'alert':null);
   bannerHtml=typeof p.banner==='string'?p.banner:'';
   drawBanner();
+  applyCss(typeof p.css==='string'?p.css:'');
+  applyLogo(typeof p.logo==='string'?p.logo:'');
   tidyMenu();
 }
 
@@ -2286,10 +2306,21 @@ function drawAdmin(d){
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
     h+='<h3>Banner</h3><div class="card">'+
-      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor">'+esc(s.banner||BANNER_DEFAULT)+'</textarea>'+
+      '<textarea id="ad-banner" rows="4" placeholder="HTML shown under the header to every visitor">'+esc(s.page_banner||BANNER_DEFAULT)+'</textarea>'+
       '<div class="frow"><span class="lead">Empty shows the page&rsquo;s own text; <code>&lt;!-- none --&gt;</code> shows nothing.</span><span class="sp"></span>'+
       '<button class="act quiet" onclick="el(\'ad-banner\').value=BANNER_DEFAULT">Default</button>'+
-      '<button class="act primary" onclick="adminSet({banner:el(\'ad-banner\').value})">Save</button></div></div>';
+      '<button class="act primary" onclick="adminSet({page_banner:el(\'ad-banner\').value})">Save</button></div></div>';
+    h+='<h3>Look</h3><div class="card">'+
+      '<label class="lead">Logo: HTML in place of the XPRS lettering, an image or text</label>'+
+      '<textarea id="ad-logo" rows="2" placeholder="&lt;img src=&quot;https://&hellip;/logo.png&quot; alt=&quot;My station&quot;&gt;">'+esc(s.page_logo||'')+'</textarea>'+
+      '<div class="frow"><span class="sp"></span>'+
+      '<button class="act quiet" onclick="el(\'ad-logo\').value=\'\'">Default</button>'+
+      '<button class="act primary" onclick="adminSet({page_logo:el(\'ad-logo\').value})">Save</button></div>'+
+      '<label class="lead" style="display:block;margin-top:12px">Stylesheet: CSS added after the page&rsquo;s own; the colours are <code>--accent</code>, <code>--bg</code>, <code>--text</code>, <code>--muted</code>, <code>--border</code> on <code>:root</code></label>'+
+      '<textarea id="ad-css" rows="6" placeholder=":root{--accent:#6fc3ff}">'+esc(s.page_css||'')+'</textarea>'+
+      '<div class="frow"><span class="sp"></span>'+
+      '<button class="act quiet" onclick="el(\'ad-css\').value=\'\'">Default</button>'+
+      '<button class="act primary" onclick="adminSet({page_css:el(\'ad-css\').value})">Save</button></div></div>';
     h+=drawModeration(d,true);
     if(canRooms)h+=drawRooms();
     h+='<h3>Administrator</h3><div class="card"><div class="frow first">'+
@@ -3035,7 +3066,10 @@ function adminDo(action,extra){
   x.send(JSON.stringify(b));
 }
 function adminSet(settings){adminDo('set',{settings:settings});
-  if(typeof settings.banner==='string'){bannerHtml=settings.banner;drawBanner();}}
+  /* The page's own settings take effect here at once; others see them on their next load. */
+  if(typeof settings.page_banner==='string'){bannerHtml=settings.page_banner;drawBanner();}
+  if(typeof settings.page_css==='string')applyCss(settings.page_css);
+  if(typeof settings.page_logo==='string')applyLogo(settings.page_logo);}
 
 // ---- moderation of this station's rooms (XPRS.md 10.10) --------------------
 //
