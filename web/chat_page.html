@@ -966,13 +966,18 @@ var THEMES=[
     '  --banner:#f3f4f1;--snack:#1f2328;--radius:8px}\n'+
     '.card,.alert{box-shadow:0 1px 3px rgba(0,0,0,.06)}.header .logo{color:#1f2328}\n'+
     '.badge.ok{background:#e3f6e8;color:#2e7d4f}.badge.bad{background:#fde0e0;color:#b3261e}.msg .bubble{border-color:var(--line)}'},
-  {name:'Forest',sw:['#0e1a12','#8fd18b','#e6efe6'],css:
+  {name:'Forest',sw:['#0a0b0a','#5fd97a','#f1f5f1'],css:
     '/* Forest */\n'+
-    ':root{--accent:#8fd18b;--bg:#0e1a12;--text:#e6efe6;--muted:#7f9a84;--border:rgba(143,209,139,.18);\n'+
-    '  --panel:#15241a;--field:#1a2c20;--line:#1d3022;--dim:#567a5e;--placeholder:#5f8266;--on-accent:#0b1a0f;\n'+
-    '  --accent-soft:rgba(143,209,139,.12);--own:#1f3a26;--own-border:rgba(143,209,139,.4);--banner:#122017;--radius:12px}\n'+
-    '.header .logo{color:#c9e8b8}body{background:radial-gradient(1000px 500px at 50% -20%,#1b3322 0%,var(--bg) 60%)}\n'+
-    '.msg .bubble{border-radius:14px}.card,.alert{border-radius:12px}'}
+    ':root{--accent:#5fd97a;--bg:#0a0b0a;--text:#f1f5f1;--muted:#8e9a90;--border:rgba(95,217,122,.22);\n'+
+    '  --panel:#121412;--field:#181b18;--line:#212521;--dim:#687069;--placeholder:#767f77;--on-accent:#06120a;\n'+
+    '  --accent-soft:rgba(95,217,122,.14);--hover:rgba(95,217,122,.08);--own:#5fd97a;--own-border:#8ae79c;\n'+
+    '  --banner:#101210;--snack:#1a241c;--radius:14px}\n'+
+    '.header{border-bottom:1px solid rgba(95,217,122,.45)}.header .logo{color:#5fd97a;text-shadow:0 0 14px rgba(95,217,122,.45)}\n'+
+    '.msg.local .bubble{color:#06120a;font-weight:500;box-shadow:0 2px 12px rgba(95,217,122,.25)}\n'+
+    '.msg .bubble,.alert,.card{border-radius:14px}.act,.act.primary,.input-area button:not(.seal),.pill,.badge{border-radius:999px}\n'+
+    '.act.primary,.fab,.input-area button:not(.seal){background:linear-gradient(135deg,#7fe596,#4fd06c);box-shadow:0 2px 10px rgba(95,217,122,.35)}\n'+
+    '#side .room.on{background:rgba(95,217,122,.1)}\n'+
+    '.input-area input{border-color:rgba(95,217,122,.3)}.input-area input:focus{box-shadow:0 0 0 2px rgba(95,217,122,.25)}'}
 ];
 function themeChips(cur){
   var h='',i;
