@@ -175,7 +175,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
       background:rgba(255,168,106,.06)}
 #side .roomhead{padding:8px 12px 2px;font-size:10px;color:#555;
       text-transform:uppercase;letter-spacing:1px}
-#chatcol{flex:1;display:flex;flex-direction:column;min-width:0}
+#chatcol{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+/* A feed (Alerts, Blog, Forum) is read, not chatted in: no composer bar. What
+   there is to add goes through the round + at the bottom right. */
+#chatcol.feed .input-area,#chatcol.feed #replybar{display:none}
+.fab{position:absolute;right:18px;bottom:calc(18px + var(--sab));width:52px;height:52px;
+     border-radius:50%;border:none;background:var(--accent);color:#101010;font-size:30px;
+     line-height:52px;padding:0;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.5);z-index:5;
+     font-family:'Wartext',sans-serif;font-weight:bold}
+.fab:hover{background:#ffb985}
+.fab.hide{display:none}
+#msgs .composer{border-color:var(--accent)}
+.cat{cursor:pointer}
+.cat:hover{border-color:var(--accent)}
+.cat .l1{text-transform:none}
 /* Width alone. With the viewport resizing for the keyboard, a phone held
    upright is briefly wider than tall, and an orientation test flipped the
    page into the desktop rail mid-sentence. */
@@ -380,6 +393,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
   <div id="side"></div>
   <div id="chatcol">
     <div class="messages" id="msgs"></div>
+    <button id="fab" class="fab hide" onclick="fabClick()" aria-label="New">+</button>
     <div class="status-bar">
       <span id="stat">connecting</span>
       <a id="getapp" class="hide" href="/app">Get the app</a>
@@ -1338,11 +1352,12 @@ function renderSide(){
       return '<div class="room'+(curRoom===k?' on':'')+'" data-r="'+k+'">'+esc(hr.name)+
         (hr.visibility==='private'?'<span class="lock" title="private: members only">&#128274;</span>':'')+
         '</div>';}).join('');}
-  var chatRooms=hostedRooms.filter(function(hr){return hr.kind!=='forum';}),
-      forumRooms=hostedRooms.filter(function(hr){return hr.kind==='forum';});
+  var chatRooms=hostedRooms.filter(function(hr){return hr.kind!=='forum';});
   var hosted=chatRooms.length?'<div class="roomhead">Station rooms</div>'+roomEntries(chatRooms,'g:'):'';
-  /* Forum rooms (XPRS.md 18.5): topics and their comments, kept and read later. */
-  var forum=forumRooms.length?'<div class="roomhead">Forum</div>'+roomEntries(forumRooms,'f:'):'';
+  /* The Forum (XPRS.md 18.5) is always on the list: its categories are the
+   * station's forum rooms, shown inside, and a category open keeps it lit. */
+  var forum='<div class="room'+(curRoom==='forum'||curRoom.slice(0,2)==='f:'?' on':'')+
+      '" data-r="forum">Forum</div>';
   el.innerHTML=htmlp+
     rooms.map(function(r){return '<div class="room'+(curRoom===r?' on':'')+
       '" data-r="'+r+'">'+roomLabel(r)+'</div>';}).join('')+
@@ -1370,7 +1385,9 @@ function switchRoom(r){
   cancelReply();
   seen={};
   var note='',canPost=true;
-  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'||r==='blog'||r.slice(0,2)==='f:'?' alerts':'');
+  el('msgs').className='messages'+(r==='alerts'||r==='dmnew'||r==='blog'||r==='forum'||r.slice(0,2)==='f:'?' alerts':'');
+  el('chatcol').className=r==='alerts'||r==='blog'||r==='forum'?'feed':'';
+  fabSet(null);
   el('sealbtn').style.display=r.slice(0,3)==='dm:'?'':'none';
   if(r==='dmnew'){
     el('txt').disabled=true;el('txt').placeholder='Choose who to write to';
@@ -1387,21 +1404,28 @@ function switchRoom(r){
       '<div class="roomnote">Sealed: only '+esc(pr)+' can read what you write.</div>';
   }
   if(r==='alerts'){
-    canPost=false;
     el('txt').disabled=true;
-    el('txt').placeholder=canAlert()?'Post an alert from the menu (top right)':
-                                      'Alerts are posted by this station\u2019s moderators';
     document.getElementById('msgs').innerHTML='';
     renderSide();
+    fabSet(canAlert()?'alert':null);
     loadAlertsFeed();
     return;
   }
   if(r==='blog'){
     el('txt').disabled=true;
-    el('txt').placeholder='Posts are published from the XPRS app';
     document.getElementById('msgs').innerHTML='';
     renderSide();
+    fabSet('blog'); /* a post is anyone's to write: the page has a key before the first keystroke */
     loadBlogFeed(true);
+    return;
+  }
+  if(r==='forum'){
+    forumTopic=null;
+    el('txt').disabled=true;
+    document.getElementById('msgs').innerHTML='';
+    renderSide();
+    fabSet(isStationAdmin?'category':null);
+    loadForumIndex(true);
     return;
   }
   if(r.slice(0,2)==='f:'){
@@ -1806,6 +1830,7 @@ function tick(){
   if(tab==='chat'){
     if(curRoom==='alerts')loadAlertsFeed();
     else if(curRoom==='blog')loadBlogFeed();
+    else if(curRoom==='forum')loadForumIndex();
     else if(curRoom.slice(0,2)==='f:')loadForum();
     else if(curRoom.slice(0,2)==='g:')loadHosted();
     else load();
@@ -2320,14 +2345,19 @@ function roomPost(b,done){
   x.send(JSON.stringify(b));
 }
 function roomCreate(){
-  var name=(el('rn-name').value||'').trim();
-  if(!name)return snack('A room needs a name');
-  roomPost({action:'create',name:name,about:(el('rn-about').value||'').trim(),
-            visibility:el('rn-vis').value,posting:el('rn-post').value,kind:el('rn-kind').value},function(j){
-    snack('Room created');
+  roomCreateFrom('rn-',el('rn-kind').value,function(){snack('Room created');});
+}
+/* Create a room from the fields prefix+name/about/vis/post: the admin's New
+ * room form, or the Forum's own category panel. done(room json) on success. */
+function roomCreateFrom(prefix,kind,done){
+  var name=(el(prefix+'name').value||'').trim();
+  if(!name)return snack(kind==='forum'?'A category needs a name':'A room needs a name');
+  roomPost({action:'create',name:name,about:(el(prefix+'about').value||'').trim(),
+            visibility:el(prefix+'vis').value,posting:el(prefix+'post').value,kind:kind},function(j){
     /* The station offered us its moderator role: accept it now. */
     var hr=hostedByCall[j.room];
     if(hr&&hr.role==='invited'&&hr.offer)acceptRoom(hr.call,hr.offer,hr.offer_role||'mod');
+    if(done)done(j);
   });
 }
 function roomDo(action,call){
@@ -2442,6 +2472,109 @@ function roomUnmirror(call){
 // post with its comments beneath, and the composer replies while one is open.
 var forumTopic=null,forumAt=0;
 function forumRoom(){return curRoom.slice(0,2)==='f:'?hostedByCall[curRoom.slice(2)]:null;}
+// ---- the round + of a feed: what the visitor may add here -----------------
+// A feed is read; what there is to add (a post, an alert, a forum category)
+// opens as a panel at the top of it, and the feed's refresh leaves the panel
+// alone while it is open.
+var fabMode=null;
+function fabSet(m){
+  fabMode=m;var f=el('fab');if(!f)return;
+  f.className='fab'+(m?'':' hide');
+  f.title=m==='alert'?'Post an alert':m==='blog'?'Write a post':m==='category'?'New forum category':'';
+}
+function fabClick(){
+  if(el('composer'))return closeComposer();
+  var h=fabMode==='alert'?alertForm():fabMode==='blog'?blogForm():fabMode==='category'?categoryForm():'';
+  if(!h)return;
+  var box=el('msgs');
+  box.insertAdjacentHTML('afterbegin','<div id="composer">'+h+'</div>');
+  box.scrollTop=0;
+  var first=box.querySelector('#composer input,#composer textarea');
+  try{if(first)first.focus();}catch(e){}
+}
+function closeComposer(){
+  var c=el('composer');if(c)c.parentNode.removeChild(c);
+  if(curRoom==='alerts')loadAlertsFeed();
+  else if(curRoom==='blog')loadBlogFeed(true);
+  else if(curRoom==='forum')loadForumIndex(true);
+}
+/* A post to everybody (XPRS.md 18): a title that becomes a label (18.1) and
+ * up to about 1500 characters, split into parts past one packet (7.6). */
+function blogForm(){
+  return '<div class="card composer"><h4>Write a post</h4>'+
+    '<div class="frow first"><input id="bl-title" class="grow" maxlength="60" placeholder="Title (becomes a label: antenna-notes)"></div>'+
+    '<div class="frow"><textarea id="bl-text" maxlength="1600" placeholder="Your post: up to about 1500 characters, signed by you and kept by every station that hears it"></textarea></div>'+
+    '<div class="frow"><span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
+    '<button class="act primary" onclick="blogPublish()">Publish</button></div></div>';
+}
+function blogPublish(){
+  var title=slugOf(el('bl-title').value),text=(el('bl-text').value||'').trim().replace(/[\x00-\x1f]+/g,' ');
+  if(!title)return snack('A post needs a title');
+  if(!text)return snack('Write the post first');
+  if(!canSign())return snack('Not ready');
+  sendIdentity();
+  var head='t:blog f:'+mycall+' ts:'+tsNow()+' title:'+title;
+  splitSigned(head,text,function(wires,why){
+    if(!wires)return snack(why||'Not signed');
+    postWires(wires,0,function(ok,why2){
+      if(!ok)return snack(why2||'The station refused it');
+      snack('Published');closeComposer();
+      setTimeout(function(){loadBlogFeed(true);},800);
+    });
+  });
+}
+/* A forum category is a forum room (XPRS.md 10.10.1, 18.5), the
+ * administrator's to create; the station's key signs it. */
+function categoryForm(){
+  return '<div class="card composer"><h4>New forum category</h4>'+
+    '<div class="frow first"><input id="fc-name" class="grow" placeholder="Category name">'+
+    '<input id="fc-about" class="grow" placeholder="About (optional)"></div>'+
+    '<div class="frow"><select id="fc-vis"><option value="public">Public: everyone reads</option>'+
+    '<option value="private">Private: members only</option></select>'+
+    '<select id="fc-post"><option value="anyone">Anyone posts</option><option value="members">Members post</option></select>'+
+    '<span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
+    '<button class="act primary" onclick="categoryCreate()">Create</button></div>'+
+    '<p class="lead" style="margin-top:10px">A category holds topics and their comments. It stays on this station '+
+    'unless you share it with other stations, in Administration.</p></div>';
+}
+function categoryCreate(){
+  roomCreateFrom('fc-','forum',function(j){
+    snack('Category created');closeComposer();
+    if(j&&j.room)switchRoom('f:'+j.room);
+  });
+}
+/* The Forum entry: its categories as cards, one click to open. */
+var forumIndexAt=0;
+function forumCards(list){
+  var h='',i;
+  for(i=0;i<list.length;i++){var hr=list[i];
+    h+='<div class="alert cat" data-r="f:'+esc(hr.call)+'" onclick="switchRoom(\'f:'+esc(hr.call)+'\')">'+
+      '<div class="l1"><span>'+esc(hr.name)+'</span>'+
+      (hr.visibility==='private'?'<span class="lock" title="private: members only">&#128274;</span>':'')+
+      (hr.mirrored?'<span class="pill on">mirrored from '+esc(hr.owner||'')+'</span>':'')+
+      (hr.shared?'<span class="pill on">shared</span>':'')+
+      '</div>'+
+      (hr.about?'<div class="body">'+esc(hr.about)+'</div>':'')+
+      '</div>';
+  }
+  if(!list.length)h='<div class="card"><div class="empty">No forum categories yet.'+
+    (isStationAdmin?' Press + to create the first.':
+     stationHasAdmin?' The administrator creates them.':
+     ' This station has no administrator yet: claim it in Administration (menu, top right), then create one here.')+
+    '</div></div>';
+  return h;
+}
+function loadForumIndex(force){
+  var t=Date.now();
+  if(!force&&t-forumIndexAt<15000)return;
+  forumIndexAt=t;
+  var draw=function(){
+    if(curRoom!=='forum'||el('composer'))return;
+    el('msgs').innerHTML=forumCards(hostedRooms.filter(function(hr){return hr.kind==='forum';}));
+    fabSet(isStationAdmin?'category':null);
+  };
+  if(canRooms)loadRooms(draw);else draw();
+}
 function forumComposer(){
   var hr=forumRoom(),t=el('txt');
   if(!hr)return;
@@ -2589,7 +2722,8 @@ function loadForum(force){
       if(!d||!d.ok||curRoom!==here||forumTopic)return;
       var note=hr.mirrored?'<div class="roomnote">A copy of a room '+esc(hr.owner||'')+' holds, kept in step with it.</div>':
                hr.shared?'<div class="roomnote">Shared with other stations'+(hr.peers&&hr.peers.length?': '+esc(hr.peers.join(', ')):'')+'.</div>':'';
-      el('msgs').innerHTML=note+topicForm(hr)+topicCards(d.topics||[]);
+      el('msgs').innerHTML='<div class="roomnote"><button class="act quiet" onclick="switchRoom(\'forum\')">&#8592; Forum</button> '+esc(hr.name)+
+        (hr.about?' <span class="dim">'+esc(hr.about)+'</span>':'')+'</div>'+note+topicForm(hr)+topicCards(d.topics||[]);
     });
     return;
   }
@@ -2634,6 +2768,8 @@ function blogPosts(rows){
     var key=baseCall(r.from||'')+'|'+headField(w,'ts');
     if(!sets[key]){sets[key]={row:r,of:of,parts:{},got:0};order.push(key);}
     var s=sets[key];
+    /* The whole, filed by a station that joined the parts itself, outranks them. */
+    if(!n&&s.of>1){s.of=1;s.parts={};s.got=0;s.row=r;}
     if(of!==s.of||s.parts[idx])continue;      /* a mixed or repeated part */
     var mi=w.indexOf(' m:');
     s.parts[idx]=mi>=0?w.slice(mi+3):'';s.got++;
@@ -2686,7 +2822,7 @@ function blogCards(){
       (p.file?'<span class="pill" title="'+esc(p.file)+'">&#128206; '+esc(p.file.split('.').pop())+'</span>':'')+
       '</div></div>';
   }
-  if(!shown)return '<div class="card"><div class="empty">No posts yet. A post is an XPRS <code>t:blog</code> packet, published from the app.</div></div>';
+  if(!shown)return '<div class="card"><div class="empty">No posts yet. Press + to write the first.</div></div>';
   return h;
 }
 /* The feed in the conversation column (the Blog entry on the left), and the
@@ -2700,7 +2836,7 @@ function loadBlogFeed(force){
     if(!d||!d.rows)return;
     if(d.moderation)applyModeration(d.moderation);
     blogs=blogPosts(d.rows);
-    if(curRoom==='blog'){markBlogSeen();el('msgs').innerHTML=blogCards();}
+    if(curRoom==='blog'){markBlogSeen();if(!el('composer'))el('msgs').innerHTML=blogCards();}
     var b=el('blogroom');if(b)b.innerHTML=blogLabel();
   });
 }
@@ -2803,7 +2939,7 @@ function loadAlertsFeed(){
     if(curRoom!=='alerts')return;
     markAlertsSeen();
     var a=el('alertsroom');if(a)a.innerHTML=alertsLabel();
-    el('msgs').innerHTML=alertCards();
+    if(!el('composer'))el('msgs').innerHTML=alertCards();
   });
 }
 function postAlert(){
@@ -2819,7 +2955,7 @@ function postAlert(){
     if(u8(w).length>250)return snack('Too long');
     postWire(w,function(ok,why2){
       if(!ok)return snack(why2||'The station refused it');
-      snack('Alert posted');el('al-text').value='';
+      snack('Alert posted');el('al-text').value='';closeComposer();
       setTimeout(function(){loadAlerts();if(curRoom==='alerts')loadAlertsFeed();},800);
     });
   });
@@ -2893,7 +3029,9 @@ function loadMyRole(){
     if(!d||!d.ok)return;
     if(d.station)stationCall=d.station;
     myStationRole=d.role||'none';
-    isStationAdmin=!!d.you;
+    isStationAdmin=!!d.you;stationHasAdmin=!!d.admin;
+    if(curRoom==='forum')fabSet(isStationAdmin?'category':null);
+    if(curRoom==='alerts')fabSet(canAlert()?'alert':null);
     myOffer=d.offer||'';
     refreshAlertMenu();
     if(myStationRole==='invited'&&myOffer&&!adminInvitedSaid){
@@ -2902,7 +3040,7 @@ function loadMyRole(){
     }
   });
 }
-var adminInvitedSaid=false,isStationAdmin=false;
+var adminInvitedSaid=false,isStationAdmin=false,stationHasAdmin=false;
 function tsAt(ms){
   var d=new Date(ms),p=function(n){return (n<10?'0':'')+n;};
   return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+
