@@ -3,7 +3,7 @@ description: >-
   The XPRS server edition: a headless station for Linux. A Reticulum transport
   node on the internet, a bridge for the devices on its own network, and the
   web chat page, all on the shared core (xprs-dev/core).
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/xprs-dev/server
 publish_to: none
 
