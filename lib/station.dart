@@ -115,6 +115,7 @@ class Station {
   /// The administrator's mesh settings (docs/plan-mesh-trust.md) become the
   /// one snapshot the receive door, the digipeater and the history server
   /// read: rebuilt here on boot and whenever the settings change.
+  String _meshSaid = '';
   void _applyMesh(WebChatApi api, Map<String, Object> settings) {
     final followed = <String>{};
     for (final c in xprsCallsignList(settings['follow'])) {
@@ -128,19 +129,20 @@ class Station {
         followed.add(c);
       }
     }
-    final policy = XprsMeshPolicy.fromSettings(settings, followed: followed);
+    // The trusted stations: the administrator's list, or the mesh group's
+    // roster, which changes as acts arrive, so this runs each minute too.
+    final policy = XprsMeshPolicy.fromSettings(settings, followed: followed, peers: api.trustedSet());
     XprsIngest.mesh = policy;
-    // The mesh of record for the rooms and the neighbour sync: in named mode
-    // the trusted peers, in open mode nobody (a room shared with the mesh is
-    // then served to no one, and no neighbour is asked).
-    api.trustedPeer = policy.named ? policy.peers.contains : null;
-    api.trustedPeers = policy.named ? () => policy.peers.toList() : null;
     XprsArchive.instance.followed = followed;
     XprsDigipeater.admits = XprsIngest.meshAdmits;
     XprsHistoryServer.trusted = policy.named ? policy.peers.contains : null;
-    LogService.instance.add('server: mesh reach alerts=${settings['reach_alerts']} '
-        'posts=${settings['reach_posts']} chat=${settings['reach_chat']} '
-        'peers=${policy.named ? policy.peers.join(',') : 'open'} followed=${followed.length}');
+    final said = 'alerts=${settings['reach_alerts']} posts=${settings['reach_posts']} '
+        'chat=${settings['reach_chat']} mode=${settings['peers_mode']} '
+        'peers=${policy.peers.join(',')} followed=${followed.length}';
+    if (said != _meshSaid) {
+      _meshSaid = said;
+      LogService.instance.add('server: mesh $said');
+    }
   }
 
   void _wireSharedRooms(FileKeyValueStore store) {
@@ -175,7 +177,10 @@ class Station {
       prevUnknown?.call(c);
       mirror.unknownSigner(c);
     };
-    _mirrorTick = Timer.periodic(const Duration(minutes: 1), (_) => unawaited(mirror.tick()));
+    _mirrorTick = Timer.periodic(const Duration(minutes: 1), (_) {
+      _applyMesh(api, api.settings); // a mesh's roster moves as acts arrive
+      unawaited(mirror.tick());
+    });
   }
 
   /// Reticulum and the hub uplinks. Separate from [start] because dialling
