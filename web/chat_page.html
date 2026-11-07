@@ -227,6 +227,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
   #banner.min{padding-top:3px;padding-bottom:3px}
 }
 .header .logo{cursor:pointer}
+.stpos{display:inline-flex;align-items:center;gap:3px;color:var(--muted);font-size:12px;text-decoration:none;
+       border:1px solid var(--border);border-radius:999px;padding:2px 8px;margin-left:-4px;white-space:nowrap}
+.stpos:hover{color:var(--accent);border-color:var(--accent)}
+@media (max-width:420px){.stpos span{display:none}}
 /* A logo of the station's own: an image fits the header's height. */
 .header .logo img,.header .logo svg{height:30px;max-width:180px;display:block;margin-top:14px;transform:scaleY(1.39)}
 .header .logo.own{letter-spacing:0;transform:none;margin-top:0;font-size:22px;display:flex;align-items:center;height:40px}
@@ -279,6 +283,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
    justify-content:flex-end, which stops a column from scrolling. */
 .messages>:first-child{margin-top:auto}
 .msg{max-width:85%}
+.daysep{align-self:center;margin:10px 0 4px;position:sticky;top:0;z-index:2}
+.daysep span{display:inline-block;background:var(--panel);border:1px solid var(--border);color:var(--muted);
+        font-size:12px;padding:3px 12px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .msg .meta{font-size:11px;margin-bottom:2px}
 .msg .meta.under{margin-bottom:0;margin-top:2px}
 .msg .dots{background:transparent;border:0;color:var(--muted);
@@ -420,7 +427,7 @@ img.shot{max-width:100%;image-rendering:pixelated;border:1px solid var(--border)
 </script></head><body>
 <div class="header">
   <span class="logo" id="logo" onclick="goHome()" title="Chat">XPRS</span>
-  <script>(function(){try{var l=localStorage.getItem('xprs_logo');if(l){var e=document.getElementById('logo');e.innerHTML=l;e.className='logo own';}}catch(e){}})();</script><span class="stcall" id="stcall" title="the station you are using"></span>
+  <script>(function(){try{var l=localStorage.getItem('xprs_logo');if(l){var e=document.getElementById('logo');e.innerHTML=l;e.className='logo own';}}catch(e){}})();</script><span class="stcall" id="stcall" title="the station you are using"></span><a id="stpos" class="stpos" target="_blank" rel="noopener" style="display:none"></a>
   <div class="menu">
     <span class="my-callsign" id="call"></span>
     <button class="menu-btn" onclick="toggleMenu()" aria-label="Menu">&#9776;</button>
@@ -1857,7 +1864,7 @@ function render(row){
   d.className='msg '+(own?'local':'remote');
   d.setAttribute('data-id',id);
   d.setAttribute('data-from',baseCall(row.from||''));
-  var when=row.ts?new Date(row.ts*1000).toLocaleTimeString():'';
+  var when=row.ts?clockOf(row.ts):'';
   var badge=row.sig==='verified'?'<span class="badge ok">signed</span>'
            :(row.sig==='none'?'<span class="badge bad">unsigned</span>':'');
   if(sealed)badge+='<span class="badge ok">sealed</span>';
@@ -1868,10 +1875,10 @@ function render(row){
     '<button class="dots" title="Message options">&#8942;</button>';
   if(own){
     d.innerHTML='<div class="bubble"></div>'+
-      '<div class="meta under"><span class="time">'+when+'</span>'+badge+extras+'</div>';
+      '<div class="meta under"><span class="time" title="'+(row.ts?esc(new Date(row.ts*1000).toLocaleString()):'')+'">'+when+'</span>'+badge+extras+'</div>';
   }else{
     d.innerHTML='<div class="meta"><span class="author"></span>'+
-      '<span class="time">'+when+'</span>'+badge+extras+'</div>'+
+      '<span class="time" title="'+(row.ts?esc(new Date(row.ts*1000).toLocaleString()):'')+'">'+when+'</span>'+badge+extras+'</div>'+
       '<div class="bubble"></div>';
     var au=d.querySelector('.author');
     au.textContent=row.from;
@@ -1909,8 +1916,39 @@ function render(row){
     at=kids[j];}
   var stick=box.scrollTop+box.clientHeight>=box.scrollHeight-40;
   box.insertBefore(d,at);
+  daysSoon();
   if(stick||own)box.scrollTop=box.scrollHeight;
   return d;
+}
+// ---- days in a conversation, as WhatsApp and Telegram show them ----------
+// A bubble says the time; a pill above the first message of each day says
+// which day: Today, Yesterday, the weekday within the week, then the date.
+function clockOf(ts){var d=new Date(ts*1000);return (d.getHours()<10?'0':'')+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();}
+function dayStart(ts){var d=new Date(ts*1000);d.setHours(0,0,0,0);return d.getTime()/1000;}
+function dayLabel(ts){
+  var t0=dayStart(Date.now()/1000),d0=dayStart(ts),days=Math.round((t0-d0)/86400),d=new Date(ts*1000);
+  if(days===0)return 'Today';
+  if(days===1)return 'Yesterday';
+  if(days>1&&days<7)return d.toLocaleDateString(undefined,{weekday:'long'});
+  var o={day:'numeric',month:'long'};if(d.getFullYear()!==new Date().getFullYear())o.year='numeric';
+  return d.toLocaleDateString(undefined,o);
+}
+var daysTimer=null;
+function daysSoon(){if(!daysTimer)daysTimer=setTimeout(function(){daysTimer=null;drawDays();},0);}
+/* Separators carry a data-ts just before their day's first second, so the
+ * ordered insert of render() puts every message after its own day's pill. */
+function drawDays(){
+  var box=el('msgs');if(!box||/\balerts\b/.test(box.className))return;
+  var old=box.querySelectorAll('.daysep'),i;for(i=0;i<old.length;i++)old[i].parentNode.removeChild(old[i]);
+  var kids=[].slice.call(box.children),last=null;
+  for(i=0;i<kids.length;i++){
+    var t=+kids[i].getAttribute('data-ts');
+    if(!t||t>=9e9||!/\bmsg\b/.test(kids[i].className))continue;
+    var ds=dayStart(t);
+    if(ds!==last){
+      var p=document.createElement('div');p.className='daysep';p.setAttribute('data-ts',ds-0.5);
+      p.innerHTML='<span>'+esc(dayLabel(t))+'</span>';box.insertBefore(p,kids[i]);last=ds;}
+  }
 }
 function clearChat(){
   toggleMenu();
@@ -2213,6 +2251,7 @@ function loadStation(){
     if(!d)return fail('v-station','Station status');
     var h='<h3>Station</h3><table class="kv">'+
       row('Callsign',esc(d.callsign||''))+
+      (stationPos?row('Location','<a href="'+esc(posLink(stationPos))+'" target="_blank" rel="noopener">'+esc(posText(stationPos))+'</a>'):'')+
       row('Board',esc(d.board||''))+
       row('Uptime',esc(hms(d.uptime_s||0)))+
       row('Free memory',esc(kb(d.heap_free)))+
@@ -2373,6 +2412,33 @@ function showStation(call){
   stationCall=String(call).toUpperCase();
   el('stcall').textContent='('+call+')';
 }
+// ---- the station's location: page_pos, "lat,lon,radius_km" -------------
+// Snapped in the administrator's browser to the centre of a square of the
+// chosen radius (its side twice the radius), so the exact place never
+// reaches the station; 0 is exact. Shown beside the station's name, a link
+// to the map, and on the Station view.
+var stationPos=null;
+function parsePos(s){
+  var m=/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,(\d+(?:\.\d+)?))?$/.exec(String(s||'').replace(/\s+/g,''));
+  if(!m)return null;var lat=+m[1],lon=+m[2],r=+(m[3]||0);
+  if(lat<-90||lat>90||lon<-180||lon>180)return null;return {lat:lat,lon:lon,r:r};}
+function snapPos(lat,lon,r){
+  if(!r)return {lat:+lat.toFixed(5),lon:+lon.toFixed(5),r:0};
+  var side=2*r,dlat=side/111.32,clat=(Math.floor(lat/dlat)+0.5)*dlat;
+  var dlon=side/(111.32*Math.max(0.01,Math.cos(clat*Math.PI/180))),clon=(Math.floor(lon/dlon)+0.5)*dlon;
+  if(clon>180)clon-=360;
+  return {lat:+clat.toFixed(4),lon:+clon.toFixed(4),r:r};}
+function posText(p){return p.lat.toFixed(p.r?2:5)+', '+p.lon.toFixed(p.r?2:5)+(p.r?' (within '+p.r+' km)':'');}
+function posLink(p){var z=p.r>=25?9:p.r>=10?10:p.r>=5?11:p.r>=1?13:16;
+  return 'https://www.openstreetmap.org/?mlat='+p.lat+'&mlon='+p.lon+'#map='+z+'/'+p.lat+'/'+p.lon;}
+function applyPos(s){
+  stationPos=parsePos(s);remember('xprs_pos',stationPos?s:'');
+  var a=el('stpos');if(!a)return;
+  if(!stationPos){a.style.display='none';return;}
+  a.style.display='';a.href=posLink(stationPos);a.title='Where this station is: '+posText(stationPos);
+  a.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" fill="currentColor"/></svg>'+
+    '<span>'+(stationPos.r?'~'+stationPos.r+' km':'map')+'</span>';
+}
 function applyServices(sv){
   if(sv&&sv.station)showStation(sv.station);
   else getJSON('/api/status',function(d){if(d)showStation(d.callsign);});
@@ -2395,6 +2461,7 @@ function applyServices(sv){
   drawBanner();
   applyCss(typeof p.css==='string'?p.css:'');
   applyLogo(typeof p.logo==='string'?p.logo:'');
+  applyPos(typeof p.pos==='string'?p.pos:'');
   tidyMenu();
 }
 
@@ -2471,6 +2538,16 @@ function drawAdmin(d){
         ['local','regional','global'].map(function(v){return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+
           (v==='local'?'Local: this network only':v==='regional'?'Local and regional: radio in range':'Global: the internet too')+'</option>';}).join('')+
         '</select></div>';};
+    var pp=parsePos(s.page_pos||'');
+    h+='<h3>Location</h3><div class="card">'+
+      '<p class="lead">Optional. Shown beside the station&rsquo;s name, as the centre of a square of the radius you choose, so the exact place stays yours.</p>'+
+      '<div class="frow"><input id="ps-lat" class="grow" inputmode="decimal" oninput="adminDirty=true" placeholder="Latitude, e.g. 48.1372" value="'+(pp?pp.lat:'')+'">'+
+      '<input id="ps-lon" class="grow" inputmode="decimal" oninput="adminDirty=true" placeholder="Longitude, e.g. 11.5756" value="'+(pp?pp.lon:'')+'">'+
+      '<button class="act" onclick="posFromDevice()">Use this device&rsquo;s location</button></div>'+
+      '<div class="frow"><select id="ps-r">'+[[0,'Exact'],[1,'Within 1 km'],[5,'Within 5 km'],[10,'Within 10 km'],[25,'Within 25 km']].map(function(o){
+        return '<option value="'+o[0]+'"'+((pp?pp.r:5)==o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>'+
+      '<span class="sp"></span><button class="act quiet" onclick="adminSet({page_pos:\'\'})">Remove</button>'+
+      '<button class="act primary" onclick="posSave()">Save</button></div></div>';
     h+='<h3>Mesh</h3><div class="card">'+
       '<p class="lead">How far away an alert, a post or a message may come from and still be kept here, shown and relayed. '+
       'Chat is a conversation; alerts and posts are a record, so they stop at the radio unless you say otherwise.</p>'+
@@ -2663,7 +2740,7 @@ function drawRooms(){
         '<span class="pill">'+(r.posting==='anyone'?'anyone posts':'members post')+'</span>'+
         (r.kind==='forum'?'<span class="pill">forum</span>':'')+
         (r.mirrored?'<span class="pill on" title="a copy of a room another station holds (XPRS.md 10.10.1)">mirrored from '+esc(r.owner||'')+'</span>':'')+
-        (r.shared?'<span class="pill on">shared</span>':'')+
+        (r.mesh?'<span class="pill on">mesh</span>':r.shared?'<span class="pill on">shared</span>':'')+
         (r.role==='invited'&&r.offer&&!isStationAdmin?'<span class="sp"></span><button class="act primary" onclick="acceptRoom(\''+c+
           '\',\''+esc(r.offer)+'\',\''+esc(r.offer_role||'mod')+'\')">Accept moderating</button>':'')+'</div>'+
       (r.about?'<div class="lead" style="margin-top:6px">'+esc(r.about)+'</div>':'')+
@@ -2677,6 +2754,7 @@ function drawRooms(){
        * or leaves the list empty to let any station mirror a public room. */
       (r.mirrored?'<div class="frow"><span class="lead">Kept in step with '+esc(r.owner||'')+': what is posted here reaches it, and its record rules here.</span>'+
           '<span class="sp"></span><button class="act" onclick="roomPost({action:\'sync\',call:\''+c+'\'},function(){snack(\'Asked \'+'+JSON.stringify(r.owner||'')+'+\' now\');})">Sync now</button></div>':
+       '<div class="frow"><label class="opt"><input type="checkbox" id="rsm-'+c+'"'+(r.mesh?' checked':'')+' onchange="if(this.checked)el(\'rs-'+c+'\').checked=true"> Shared with the mesh: every trusted station (Mesh, above)</label></div>'+
        '<div class="frow"><label class="opt"><input type="checkbox" id="rs-'+c+'"'+(r.shared?' checked':'')+'> Shared with other stations</label>'+
           '<input id="rsp-'+c+'" class="grow" placeholder="Peer stations, e.g. X3ABCD X3EFGH (empty: any station may mirror a public room)" value="'+esc((r.peers||[]).join(' '))+'" style="text-transform:uppercase">'+
           '<button class="act" onclick="roomShare(\''+c+'\')">Save sharing</button></div>'+
@@ -2713,7 +2791,7 @@ function drawRooms(){
 }
 function roomShare(call){
   var peers=(el('rsp-'+call).value||'').toUpperCase().split(/[\s,]+/).filter(function(x){return x;});
-  var shared=el('rs-'+call).checked,hr=hostedByCall[call];
+  var mesh=!!(el('rsm-'+call)&&el('rsm-'+call).checked),shared=el('rs-'+call).checked||mesh,hr=hostedByCall[call];
   /* Private means served to members, not secret (XPRS.md 10.10.1): shared,
    * the other stations' operators can read it too. Said before it is done. */
   if(shared&&hr&&hr.visibility==='private'&&!hr.shared){
@@ -2721,7 +2799,7 @@ function roomShare(call){
     if(!confirm('This room is private: its members read it, and so can you. Shared with '+peers.join(', ')+
                 ', the operators of those stations can read it as well. Share it?'))return;
   }
-  roomPost({action:'share',call:call,shared:shared,peers:peers},function(){snack('Sharing saved');});
+  roomPost({action:'share',call:call,shared:shared,mesh:mesh,peers:peers},function(){snack('Sharing saved');});
 }
 function roomMirror(){
   var call=(el('mr-call').value||'').trim().toUpperCase(),owner=(el('mr-owner').value||'').trim().toUpperCase();
@@ -2821,8 +2899,8 @@ function forumCards(list){
     h+='<div class="alert cat" data-r="f:'+esc(hr.call)+'" onclick="switchRoom(\'f:'+esc(hr.call)+'\')">'+
       '<div class="l1"><span>'+esc(hr.name)+'</span>'+
       (hr.visibility==='private'?'<span class="lock" title="private: members only">&#128274;</span>':'')+
-      (hr.mirrored?'<span class="pill on">mirrored from '+esc(hr.owner||'')+'</span>':'')+
-      (hr.shared?'<span class="pill on">shared</span>':'')+
+      (hr.mirrored?'<span class="pill on">from '+esc(hr.owner||'')+'</span>':'')+
+      (hr.mesh?'<span class="pill on">mesh</span>':hr.shared?'<span class="pill on">shared</span>':'')+
       '</div>'+
       (hr.about?'<div class="body">'+esc(hr.about)+'</div>':'')+
       '</div>';
@@ -3251,6 +3329,7 @@ function adminDo(action,extra){
   x.send(JSON.stringify(b));
 }
 function adminSet(settings){adminDo('set',{settings:settings});
+  if(typeof settings.page_pos==='string')applyPos(settings.page_pos);
   /* The page's own settings take effect here at once; others see them on their next load. */
   if(typeof settings.page_banner==='string'){bannerHtml=settings.page_banner;drawBanner();}
   if(typeof settings.page_css==='string')applyCss(settings.page_css);
@@ -3340,6 +3419,23 @@ function acceptModerator(){
     snack('You moderate '+stationCall+' now');
     myOffer='';loadMyRole();setTimeout(loadAdmin,500);
   });
+}
+/* The browser asks the person first; it answers only on a secure page
+ * (https, or localhost), so a station opened over plain http says why. */
+function posFromDevice(){
+  if(!navigator.geolocation)return snack('This browser cannot tell its location');
+  if(!window.isSecureContext)return snack('The browser gives the location only on an https page');
+  snack('Asking the browser for this device\u2019s location\u2026');
+  navigator.geolocation.getCurrentPosition(function(p){
+    el('ps-lat').value=p.coords.latitude.toFixed(5);el('ps-lon').value=p.coords.longitude.toFixed(5);adminDirty=true;
+    snack('Location filled in: choose the radius and Save');
+  },function(e){snack(e&&e.code===1?'Location not allowed':'No location from this device');},{enableHighAccuracy:true,timeout:15000});
+}
+function posSave(){
+  var lat=parseFloat(el('ps-lat').value),lon=parseFloat(el('ps-lon').value),r=+el('ps-r').value;
+  if(isNaN(lat)||isNaN(lon)||lat<-90||lat>90||lon<-180||lon>180)return snack('A latitude and a longitude, please');
+  var p=snapPos(lat,lon,r);adminDirty=false;
+  adminSet({page_pos:p.lat+','+p.lon+','+p.r});
 }
 function adminAppoint(){
   var c=(el('ad-newmod').value||'').trim().toUpperCase();

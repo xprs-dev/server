@@ -130,6 +130,11 @@ class Station {
     }
     final policy = XprsMeshPolicy.fromSettings(settings, followed: followed);
     XprsIngest.mesh = policy;
+    // The mesh of record for the rooms and the neighbour sync: in named mode
+    // the trusted peers, in open mode nobody (a room shared with the mesh is
+    // then served to no one, and no neighbour is asked).
+    api.trustedPeer = policy.named ? policy.peers.contains : null;
+    api.trustedPeers = policy.named ? () => policy.peers.toList() : null;
     XprsArchive.instance.followed = followed;
     XprsDigipeater.admits = XprsIngest.meshAdmits;
     XprsHistoryServer.trusted = policy.named ? policy.peers.contains : null;
@@ -149,6 +154,7 @@ class Station {
     mirror.selfCallsign = () => callsign;
     mirror.pairs = api.mirrorPairs;
     mirror.haveKey = (g) => keyFor(g) != null;
+    mirror.onMeshRoom = api.autoMirror;
     api.onSync = mirror.poke;
     final prevResult = XprsIngest.onResult;
     XprsIngest.onResult = (p) {
