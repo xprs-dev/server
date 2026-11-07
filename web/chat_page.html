@@ -201,6 +201,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 #msgs .composer{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 #msgs .composer .frow .grow{min-width:120px}
 #msgs .composer textarea{min-height:110px;resize:vertical}
+.alert.post.pend.sending{opacity:.75}.alert.post.pend.failed{border-left-color:#ff5a5a}
+.pill.bad{color:#ff8a80;border-color:#ff5a5a}
+.alert.post .body.md{white-space:normal}
+.md p{margin:0 0 8px}.md p:last-child{margin-bottom:0}
+.md h3,.md h4,.md h5{margin:10px 0 6px;line-height:1.25;text-transform:none}.md h3{font-size:18px}.md h4{font-size:16px}.md h5{font-size:14px}
+.md ul,.md ol{margin:0 0 8px;padding-left:22px}.md li{margin:2px 0}
+.md blockquote{margin:0 0 8px;padding:2px 10px;border-left:3px solid var(--border);color:var(--muted)}
+.md code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--field);padding:1px 4px;border-radius:4px}
+.md a{color:var(--accent)}.md hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+.md .mdimg{display:block;max-width:100%;max-height:480px;height:auto;border-radius:8px;margin:6px 0}
+.mdph{display:inline-block;padding:10px 12px;margin:6px 0;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px}
+.mdph small{display:block;font-size:11px;color:var(--dim)}
+.mdtools{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:8px 0 6px}
+.mdb{min-width:32px;height:30px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--field);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.mdb:hover{border-color:var(--accent)}.mdb.on{color:var(--accent);border-color:var(--accent)}
+.mdtabs{display:none;gap:4px}
+.mdpane{display:flex;gap:10px;align-items:stretch}
+.mdpane textarea,.mdpane .mdprev{flex:1;min-width:0;min-height:220px;box-sizing:border-box}
+.mdpane textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.45}
+.mdprev{border:1px solid var(--border);border-radius:8px;padding:8px 12px;overflow:auto;max-height:60vh;margin:0}
+.mdcount{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}.mdcount.over{color:#ff8a80}
+@media (max-width:640px){.mdtabs{display:inline-flex}.mdpane .mdprev{display:none}
+  .mdpane.prev textarea{display:none}.mdpane.prev .mdprev{display:block}}
 #ad-css{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap}
 .themes{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 10px}
 .theme{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:2px solid transparent;
@@ -907,6 +930,98 @@ function nostrOpen(peerHex,x,cb){
     if(r&&r.then)r.then(f,function(){cb(null);});else f(r);
   }catch(e){cb(null);}}
 
+// ---- formatted text (XPRS.md 4.11): a small markdown, read safely --------
+// A t:blog's m: is markdown: paragraphs, headings, emphasis, lists, quotes,
+// links and images. The wire carries no newline (one packet per line, parts
+// joined by a space), so a line break travels as U+2028 and a paragraph break
+// as U+2029. An image or a file is named by its content reference (7.7 `ref`:
+// the SHA-256 as 43 base64url characters, a dot, the type) with no `file:`
+// before it, so a slow link carries only the words and whoever can fetches
+// the bytes by hash. Everything is escaped first; nothing typed becomes HTML.
+var MD_LS='\u2028',MD_PS='\u2029';
+var MD_IMG={jpg:1,jpeg:1,png:1,gif:1,webp:1,avif:1,bmp:1};
+/* A content reference: base64url (what a sender writes) or 64 hex, a dot,
+ * 1 to 8 lowercase letters or digits (7.7). */
+function isRef(s){return /^(?:[A-Za-z0-9_-]{43}|[0-9a-f]{64})\.[a-z0-9]{1,8}$/.test(s||'');}
+function refExt(r){return (r||'').split('.').pop();}
+function isImageRef(r){return isRef(r)&&!!MD_IMG[refExt(r)];}
+/* The reference a file gets: sha256 of its bytes as base64url, no padding. */
+function refOf(bytes,ext){
+  return b64uEnc(sha256(bytes))+'.'+String(ext||'bin').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);}
+/* Composer text -> what m: carries: newlines become the separators, spaces
+ * around them go (the splitter cuts only at a plain space and the join puts
+ * one back, so a space beside a separator would be noise), other control
+ * characters become a space. */
+function mdToWire(t){
+  return String(t||'').replace(/\r\n?/g,'\n').replace(/[ \t]*\n[ \t]*/g,'\n').trim()
+    .replace(/\n{2,}/g,MD_PS).replace(/\n/g,MD_LS)
+    .replace(/[\x00-\x1f\x7f]+/g,' ');}
+/* And back, for editing a post again. */
+function mdFromWire(t){return String(t||'').replace(/ ?\u2029 ?/g,'\n\n').replace(/ ?\u2028 ?/g,'\n');}
+function mdEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+/* Every reference the text names, images and files, in order, once each. */
+function mdRefs(text){
+  var out=[],seen={},re=/\]\(([A-Za-z0-9_-]{43}\.[a-z0-9]{1,8}|[0-9a-f]{64}\.[a-z0-9]{1,8})\)/g,m;
+  while((m=re.exec(String(text||''))))if(!seen[m[1]]){seen[m[1]]=1;out.push(m[1]);}
+  return out;}
+/* One line of text -> HTML. opts.img(ref, alt) and opts.file(ref, label) draw
+ * the references; opts.mention(call) an @CALL (7.5.2). */
+function mdInline(s,opts){
+  var keep=[],put=function(h){keep.push(h);return '\u0000'+(keep.length-1)+'\u0000';};
+  s=String(s).replace(/\u0000/g,'');
+  s=s.replace(/`([^`]+)`/g,function(_,c){return put('<code>'+mdEsc(c)+'</code>');});
+  s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,function(all,alt,r){
+    if(!isRef(r))return all;
+    return put(isImageRef(r)&&opts.img?opts.img(r,alt):opts.file?opts.file(r,alt||r):mdEsc(all));});
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,function(all,label,u){
+    if(isRef(u))return put(opts.file?opts.file(u,label):mdEsc(label));
+    if(!/^https?:\/\/[^\s<>"']+$/i.test(u))return all;
+    return put('<a href="'+mdEsc(u)+'" target="_blank" rel="noopener nofollow">'+mdEmph(mdEsc(label))+'</a>');});
+  s=s.replace(/\bhttps?:\/\/[^\s<>"'()\u0000]+[^\s<>"'().,;:!?\u0000]/gi,function(u){
+    return put('<a href="'+mdEsc(u)+'" target="_blank" rel="noopener nofollow">'+mdEsc(u)+'</a>');});
+  if(opts.mention)s=s.replace(/(^|[^A-Za-z0-9_@])@([A-Z0-9][A-Z0-9\/-]*[A-Z0-9]|[A-Z0-9])(?![a-z])/g,
+    function(_,pre,c){return pre+put(opts.mention(c));});
+  s=mdEmph(mdEsc(s));
+  return s.replace(/\u0000(\d+)\u0000/g,function(_,i){return keep[+i];});
+}
+/* Emphasis on escaped text: **bold**, *italic*, _italic_ (not inside a word,
+ * so snake_case stays), ~~strike~~. */
+function mdEmph(s){
+  return s.replace(/\*\*(?=\S)([^*]*?\S)\*\*/g,'<strong>$1</strong>')
+    .replace(/~~(?=\S)([^~]*?\S)~~/g,'<del>$1</del>')
+    .replace(/(^|[^*\w])\*(?=\S)([^*]*?\S)\*(?![*\w])/g,'$1<em>$2</em>')
+    .replace(/(^|[^\w])_(?=\S)([^_]*?\S)_(?!\w)/g,'$1<em>$2</em>');
+}
+/* The whole text -> HTML blocks. */
+function mdRender(text,opts){
+  opts=opts||{};
+  var lines=String(text||'').replace(/\r\n?/g,'\n').replace(/ ?\u2029 ?/g,'\n\n').replace(/ ?\u2028 ?/g,'\n').split('\n');
+  var out=[],para=[],list=null,quote=[],i,l,m;
+  var inl=function(t){return mdInline(t,opts);};
+  function flush(){
+    if(para.length){out.push('<p>'+para.map(inl).join('<br>')+'</p>');para=[];}
+    if(list){out.push('<'+list.tag+'>'+list.items.map(function(x){return '<li>'+inl(x)+'</li>';}).join('')+'</'+list.tag+'>');list=null;}
+    if(quote.length){out.push('<blockquote>'+quote.map(inl).join('<br>')+'</blockquote>');quote=[];}
+  }
+  for(i=0;i<lines.length;i++){
+    l=lines[i].replace(/^\s+|\s+$/g,'');
+    if(!l){flush();continue;}
+    if((m=/^(#{1,3})\s+(.+)$/.exec(l))){flush();out.push('<h'+(m[1].length+2)+'>'+inl(m[2])+'</h'+(m[1].length+2)+'>');continue;}
+    if(/^(?:-{3,}|\*{3,}|_{3,})$/.test(l)){flush();out.push('<hr>');continue;}
+    if((m=/^>\s?(.*)$/.exec(l))){if(para.length||list)flush();quote.push(m[1]);continue;}
+    if((m=/^[-*+]\s+(.+)$/.exec(l))||(m=/^\d{1,3}[.)]\s+(.+)$/.exec(l))){
+      var tag=/^\d/.test(l)?'ol':'ul';
+      if(para.length||quote.length||(list&&list.tag!==tag))flush();
+      if(!list)list={tag:tag,items:[]};
+      list.items.push(m[1]);continue;}
+    if(list||quote.length)flush();
+    para.push(l);
+  }
+  flush();
+  return out.join('');
+}
+
 
 // ---- storage: localStorage -> cookie -> memory (captive WebViews) ----
 var mem={};
@@ -1315,9 +1430,10 @@ function sendMsg(){
   var t=document.getElementById('txt');
   var text=t.value.trim();
   if(!text||!canSign()||curRoom==='alerts')return;
-  text=text.replace(/[\x00-\x1f]/g,' ');
   sendIdentity();
-  if(curRoom.slice(0,2)==='f:'){t.value='';cancelReply();forumReply(text);return;}
+  /* A forum comment is a t:blog: formatted text (XPRS.md 4.11), its lines kept. */
+  if(curRoom.slice(0,2)==='f:'){t.value='';cancelReply();forumReply(mdToWire(text));return;}
+  text=text.replace(/[\x00-\x1f]/g,' ');
   var thread='';
   if(replyTo){
     if(replyTo.root)thread=' root:'+replyTo.root;
@@ -1390,7 +1506,7 @@ var seen={};
 // first six hex characters. What r: and root: point at.
 function wireId(w){
   var canon=w.replace(/ sig:[!-~]{60}/,'').replace(/ via:[A-Za-z0-9,\-]+/,'');
-  return hex(sha256(s2b(canon))).slice(0,6);}
+  return hex(sha256(u8(canon))).slice(0,6);}  /* UTF-8, as every station hashes it */
 
 // Replying (XPRS 6.4): r: names the parent; below the first level root:
 // names the thread. idmap lets the quote show who said what.
@@ -2442,6 +2558,9 @@ function applyPos(s){
 function applyServices(sv){
   if(sv&&sv.station)showStation(sv.station);
   else getJSON('/api/status',function(d){if(d)showStation(d.callsign);});
+  /* Files by reference (API-HTTP.md /api/xprs/file): a station that
+   * says nothing serves none, and the editor offers no image button. */
+  if(sv&&sv.file)fileCaps={get:!!sv.file.get,put:!!sv.file.put,max:+sv.file.max||0};
   var p=sv&&sv.page;
   if(!p)return tidyMenu();
   if(p.session){canSession=true;ensureSession(0);}
@@ -2855,28 +2974,27 @@ function closeComposer(){
   else if(curRoom==='forum')loadForumIndex(true);
 }
 /* A post to everybody (XPRS.md 18): a title that becomes a label (18.1) and
- * up to about 1500 characters, split into parts past one packet (7.6). */
+ * formatted text (4.11) up to nine packets (7.6), written beside its preview. */
 function blogForm(){
   return '<div class="card composer"><h4>Write a post</h4>'+
-    '<div class="frow first"><input id="bl-title" class="grow" maxlength="60" placeholder="Title"></div>'+
-    '<div class="frow"><textarea id="bl-text" maxlength="1600" placeholder="Your post"></textarea></div>'+
+    '<div class="frow first"><input id="bl-title" class="grow" maxlength="60" placeholder="Title" oninput="mdLive(\'bl\')"></div>'+
+    mdEditor('bl','Your post. **bold**, *italic*, - lists, > quotes, [links](https://...)')+
     '<div class="frow"><span class="sp"></span><button class="act quiet" onclick="closeComposer()">Cancel</button>'+
-    '<button class="act primary" onclick="blogPublish()">Publish</button></div></div>';
+    '<button class="act primary" id="bl-go" onclick="blogPublish()">Publish</button></div></div>';
 }
+function blogHead(){return 't:blog f:'+mycall+' ts:'+tsNow()+' title:'+(slugOf((el('bl-title')||{}).value)||'x');}
 function blogPublish(){
-  var title=slugOf(el('bl-title').value),text=(el('bl-text').value||'').trim().replace(/[\x00-\x1f]+/g,' ');
+  var title=slugOf(el('bl-title').value),text=mdToWire(el('bl-text').value);
   if(!title)return snack('A post needs a title');
   if(!text)return snack('Write the post first');
+  if(mdUploading)return snack('An image is still on its way to the station');
   if(!canSign())return snack('Not ready');
   sendIdentity();
   var head='t:blog f:'+mycall+' ts:'+tsNow()+' title:'+title;
   splitSigned(head,text,function(wires,why){
     if(!wires)return snack(why||'Not signed');
-    postWires(wires,0,function(ok,why2){
-      if(!ok)return snack(why2||'The station refused it');
-      snack('Published');closeComposer();
-      setTimeout(function(){loadBlogFeed(true);},800);
-    });
+    closeComposer();
+    pendingPost({room:'',title:title,text:text},head,wires);
   });
 }
 /* A forum category is a forum room (XPRS.md 10.10.1, 18.5), the
@@ -2942,26 +3060,35 @@ function slugOf(t){return (t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').repla
  * over the whole and carried on the last part (9.1.1). cb(wires) or
  * cb(null, why). A post that fits one packet is signed as one. */
 function splitSigned(head,text,cb){
+  var sp=splitParts(head,text);
+  if(sp.why)return cb(null,sp.why);
   var canonical=head+' m:'+text;
-  if(u8(canonical).length+65<=250){signAny(canonical,function(w,why){cb(w?[w]:null,why);});return;}
-  var per=250-u8(head).length-6-65-3;        /* n:i/k, sig:, m: */
-  if(per<24)return cb(null,'Too long a head for a split post');
-  var words=text.split(' '),parts=[],cur='',i;
-  for(i=0;i<words.length;i++){
-    if(u8(words[i]).length>per)return cb(null,'A word too long for one packet');
-    var next=cur?cur+' '+words[i]:words[i];
-    if(u8(next).length>per){parts.push(cur);cur=words[i];}else cur=next;
-  }
-  if(cur)parts.push(cur);
-  if(parts.length>9)return cb(null,'Too long: a post is at most nine packets, about '+(9*per)+' characters here');
+  if(!sp.parts){signAny(canonical,function(w,why){cb(w?[w]:null,why);});return;}
   signAny(canonical,function(signed,why){
     if(!signed)return cb(null,why);
     var m=signed.match(/ sig:([!-~]{60})/);
     if(!m)return cb(null,'Not signed');
-    var k=parts.length,out=[],j;
-    for(j=0;j<k;j++)out.push(head+' n:'+(j+1)+'/'+k+(j===k-1?' sig:'+m[1]:'')+' m:'+parts[j]);
+    var k=sp.parts.length,out=[],j;
+    for(j=0;j<k;j++)out.push(head+' n:'+(j+1)+'/'+k+(j===k-1?' sig:'+m[1]:'')+' m:'+sp.parts[j]);
     cb(out);
   });
+}
+/* The arithmetic of splitSigned on its own: {parts:null} when one signed
+ * packet holds it, {parts:[...]} for a split, {why} when it cannot go, and
+ * {count, per} either way for the composer's counter. */
+function splitParts(head,text){
+  if(u8(head+' m:'+text).length+65<=250)return {parts:null,count:1,per:0};
+  var per=250-u8(head).length-6-65-3;        /* n:i/k, sig:, m: */
+  if(per<24)return {why:'Too long a head for a split post',count:0,per:per};
+  var words=text.split(' '),parts=[],cur='',i;
+  for(i=0;i<words.length;i++){
+    if(u8(words[i]).length>per)return {why:'A word too long for one packet',count:0,per:per};
+    var next=cur?cur+' '+words[i]:words[i];
+    if(u8(next).length>per){parts.push(cur);cur=words[i];}else cur=next;
+  }
+  if(cur)parts.push(cur);
+  if(parts.length>9)return {why:'Too long: a post is at most nine packets, about '+(9*per)+' characters here',count:parts.length,per:per};
+  return {parts:parts,count:parts.length,per:per};
 }
 /* One after another: the station holds the parts until the last arrives. */
 function postWires(wires,i,cb){
@@ -2970,30 +3097,27 @@ function postWires(wires,i,cb){
 }
 function forumNewTopic(){
   var hr=forumRoom();if(!hr)return;
-  var title=slugOf(el('ft-title').value),text=(el('ft-text').value||'').trim().replace(/[\x00-\x1f]+/g,' ');
+  var title=slugOf(el('ft-title').value),text=mdToWire(el('ft-text').value);
   if(!title)return snack('A topic needs a title');
   if(!text)return snack('Write the post first');
+  if(mdUploading)return snack('An image is still on its way to the station');
   if(!canSign())return snack('Not ready');
   sendIdentity();
   var head='t:blog f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' title:'+title;
   splitSigned(head,text,function(wires,why){
     if(!wires)return snack(why||'Not signed');
-    postWires(wires,0,function(ok,why2){
-      if(!ok)return snack(why2||'The station refused it');
-      el('ft-title').value='';el('ft-text').value='';
-      snack('Topic posted');loadForum(true);
-    });
+    el('ft-title').value='';el('ft-text').value='';mdLive('ft');
+    pendingPost({room:hr.call,title:title,text:text},head,wires);
   });
 }
+function forumHead(){var hr=forumRoom();
+  return 't:blog f:'+mycall+' d:'+(hr?hr.call:'X')+' ts:'+tsNow()+' title:'+(slugOf((el('ft-title')||{}).value)||'x');}
 function forumReply(text){
   var hr=forumRoom();if(!hr||!forumTopic)return;
   var head='t:blog f:'+mycall+' d:'+hr.call+' ts:'+tsNow()+' r:'+forumTopic.id;
   splitSigned(head,text,function(wires,why){
     if(!wires)return snack(why||'Not signed');
-    postWires(wires,0,function(ok,why2){
-      if(!ok)return snack(why2||'The station refused it');
-      loadForum(true);
-    });
+    pendingPost({room:hr.call,r:forumTopic.id,title:'',text:text},head,wires);
   });
 }
 /* The author withdraws a post (7.8.2); a room moderator takes one down (10.10). */
@@ -3026,9 +3150,9 @@ function topicForm(hr){
     (!sess?'Prove your key (menu, top right) to open a topic or reply.':
      'Only members of '+esc(hr.name)+' open topics and reply.')+'</p></div>';
   return '<div class="card" id="topicform"><h4>New topic</h4>'+
-    '<div class="frow first"><input id="ft-title" class="grow" maxlength="60" placeholder="Title (becomes a label: balun-question)"></div>'+
-    '<div class="frow"><textarea id="ft-text" maxlength="1600" placeholder="Your post: up to about 1500 characters, signed by you"></textarea></div>'+
-    '<div class="frow"><span class="sp"></span><button class="act primary" onclick="forumNewTopic()">Post topic</button></div></div>';
+    '<div class="frow first"><input id="ft-title" class="grow" maxlength="60" placeholder="Title (becomes a label: balun-question)" oninput="mdLive(\'ft\')"></div>'+
+    mdEditor('ft','Your post, signed by you. **bold**, *italic*, - lists, > quotes')+
+    '<div class="frow"><span class="sp"></span><button class="act primary" id="ft-go" onclick="forumNewTopic()">Post topic</button></div></div>';
 }
 function topicCards(list){
   var h='',now=Math.floor(Date.now()/1000),i;
@@ -3054,11 +3178,11 @@ function postCard(p,op){
     '<div class="l1"><span>'+(op?esc((p.title||'').replace(/-/g,' ')):esc(p.from))+'</span>'+badge+
     (p.edited?'<span class="pill">edited</span>':'')+
     '<span class="sp"></span><span class="when">'+(p.ts?esc(ago(now-p.ts))+' ago':'')+'</span></div>'+
-    '<div class="body">'+esc(p.text)+'</div>'+
-    '<div class="l2">'+(op?callLink(p.from):'')+
+    '<div class="body md">'+mdHtml(p.text)+'</div>'+
+    '<div class="l2">'+(op?callLink(p.from):'')+pendPills(p)+
     (p.tags?p.tags.split(',').map(function(x){return '<span class="pill">'+esc(x)+'</span>';}).join(''):'')+
     '<span class="sp"></span>'+
-    (own?'<button class="act quiet" onclick="forumWithdraw(\''+esc(p.id)+'\')">Withdraw</button>':
+    (p.pend?'':own?'<button class="act quiet" onclick="forumWithdraw(\''+esc(p.id)+'\')">Withdraw</button>':
      mod?'<button class="act quiet" onclick="forumRemove(\''+esc(p.id)+'\')">Delete</button>':'')+
     '</div></div>';
 }
@@ -3070,12 +3194,14 @@ function loadForum(force){
   var q=sess?'&session='+encodeURIComponent(sess):'';
   var here='f:'+hr.call;
   if(!forumTopic){
+    if(force!==true&&mdBusy('ft'))return;
     getJSON('/api/rooms?topics='+encodeURIComponent(hr.call)+q,function(d){
       if(!d||!d.ok||curRoom!==here||forumTopic)return;
       var note=hr.mirrored?'<div class="roomnote">A copy of a room '+esc(hr.owner||'')+' holds, kept in step with it.</div>':
                hr.shared?'<div class="roomnote">Shared with other stations'+(hr.peers&&hr.peers.length?': '+esc(hr.peers.join(', ')):'')+'.</div>':'';
       el('msgs').innerHTML='<div class="roomnote"><button class="act quiet" onclick="switchRoom(\'forum\')">&#8592; Forum</button> '+esc(hr.name)+
-        (hr.about?' <span class="dim">'+esc(hr.about)+'</span>':'')+'</div>'+note+topicForm(hr)+topicCards(d.topics||[]);
+        (hr.about?' <span class="dim">'+esc(hr.about)+'</span>':'')+'</div>'+note+topicForm(hr)+
+        pendCards(pendFor(hr.call,'',d.topics||[]))+topicCards(d.topics||[]);
     });
     return;
   }
@@ -3084,17 +3210,244 @@ function loadForum(force){
     if(!d||!d.rows||curRoom!==here||!forumTopic||forumTopic.id!==want)return;
     if(d.moderation)applyModeration({removed:d.moderation.removed||[],away:Object.keys(modAway)});
     var posts=blogPosts(d.rows),i,top=null,comments=[];
+    pendPrune(posts);
     for(i=0;i<posts.length;i++){
       if(modRemoved[posts[i].id])continue;
       if(posts[i].title){if(!top)top=posts[i];}
       else comments.push(posts[i]);
     }
     comments.sort(function(a,b){return a.ts-b.ts;});
+    comments=comments.concat(pendFor(hr.call,want,posts));
     el('msgs').innerHTML='<div class="roomnote"><button class="act quiet" onclick="closeTopic()">&#8592; Topics</button> '+esc(hr.name)+'</div>'+
       (top?postCard(top,true):'<div class="card"><div class="empty">This topic is gone.</div></div>')+
       comments.map(function(c){return postCard(c,false);}).join('');
     var box=el('msgs');box.scrollTop=box.scrollHeight;
   });
+}
+// ---- posts on their way (XPRS.md 18, 7.6) ---------------------------------
+// The station answers a send at once but files it in its archive on its own
+// clock (a station batches its writes), and history reads only the archive.
+// So the visitor's own post is drawn the moment it is signed, marked sending,
+// then published, and stays until history returns the same packet (the same
+// section 5 identifier). A refused one keeps its wires to try again. Kept in
+// this browser's storage, so a reload in between does not lose it.
+var PEND_KEY='xprs_pending_posts',pendingPosts=[],pendTimer=null,pendStep=0;
+try{pendingPosts=JSON.parse(localStorage.getItem(PEND_KEY)||'[]')||[];}catch(e){pendingPosts=[];}
+function pendSave(){try{localStorage.setItem(PEND_KEY,JSON.stringify(pendingPosts));}catch(e){}}
+/* post: {room, r, title, text}; head the wire's head without n:/sig:/m:. */
+function pendingPost(post,head,wires){
+  var p={pend:1,id:wireId(wires.length===1?wires[0]:head+' m:'+post.text),
+    room:post.room||'',r:post.r||'',from:mycall,ts:Math.floor(Date.now()/1000),
+    title:post.title||'',tags:'',file:'',text:post.text,sig:'verified',
+    state:'sending',why:'',at:Date.now(),wires:wires};
+  pendingPosts=pendingPosts.filter(function(q){return q.id!==p.id;});
+  pendingPosts.unshift(p);pendSave();pendDraw();pendSend(p);
+}
+function pendSend(p){
+  p.state='sending';p.why='';pendSave();
+  postWires(p.wires,0,function(ok,why){
+    p.state=ok?'sent':'failed';p.why=ok?'':(why||'The station refused it');p.at=Date.now();
+    pendSave();pendDraw();
+    if(ok){snack('Published');pendPoll(true);}else snack(p.why);
+  });
+}
+function pendById(id){for(var i=0;i<pendingPosts.length;i++)if(pendingPosts[i].id===id)return pendingPosts[i];return null;}
+function pendRetry(id){var p=pendById(id);if(p){pendSend(p);pendDraw();}}
+function pendDrop(id){pendingPosts=pendingPosts.filter(function(q){return q.id!==id;});pendSave();pendDraw();}
+/* Forget what the station now files (list: posts or topics with .id), what
+ * was published ten minutes ago and never came back, and a refusal a day old. */
+function pendPrune(list){
+  var have={},i,n=pendingPosts.length,now=Date.now();
+  for(i=0;i<(list||[]).length;i++)have[list[i].id]=1;
+  pendingPosts=pendingPosts.filter(function(p){
+    if(have[p.id])return false;
+    if(p.state==='sent'&&now-p.at>600000)return false;
+    if(p.state!=='sent'&&now-p.at>86400000)return false;
+    return true;});
+  if(pendingPosts.length!==n)pendSave();
+}
+/* The pending posts of one place: the Blog ('' ''), a forum room's topics
+ * (room, ''), or the comments of one topic (room, topic id). */
+function pendFor(room,r,list){
+  pendPrune(list);
+  return pendingPosts.filter(function(p){return p.room===room&&p.r===r&&(r||p.title);});
+}
+function pendDraw(){
+  if(curRoom==='blog'){if(!el('composer'))el('msgs').innerHTML=blogCards();}
+  else if(forumRoom())loadForum(true);
+}
+/* Ask again soon while a post is published and not filed: 2, 4, 8, 16, then
+ * every 30 seconds, for ten minutes at most. */
+function pendPoll(reset){
+  if(reset)pendStep=0;
+  if(pendTimer){clearTimeout(pendTimer);pendTimer=null;}
+  var waiting=pendingPosts.some(function(p){return p.state==='sent';});
+  if(!waiting||pendStep>24)return;
+  pendTimer=setTimeout(function(){
+    pendTimer=null;pendStep++;
+    if(curRoom==='blog')loadBlogFeed(true);
+    else if(forumRoom())loadForum('poll');
+    pendPoll(false);
+  },[2000,4000,8000,16000,30000][Math.min(pendStep,4)]);
+}
+function pendPills(p){
+  if(!p.pend)return '';
+  if(p.state==='sending')return '<span class="pill">sending&hellip;</span>';
+  if(p.state==='sent')return '<span class="pill on" title="The station took it and files it in its archive shortly">published</span>';
+  return '<span class="pill bad" title="'+esc(p.why)+'">not sent</span>'+
+    '<button class="act quiet" onclick="pendRetry(\''+esc(p.id)+'\')">Retry</button>'+
+    '<button class="act quiet" onclick="pendDrop(\''+esc(p.id)+'\')">Discard</button>';
+}
+// ---- the post editor: raw text beside its preview (XPRS.md 4.11) -----------
+// One editor for the Blog and a forum topic, by prefix: <p>-text, <p>-prev,
+// <p>-count, <p>-file. Wider than 640px the two sit side by side; on a phone
+// a Write / Preview switch. An image is shrunk, hashed here (7.7 ref), shown at
+// once from the browser's copy, and stored on the station by its reference.
+var mdBlobs={},mdUploading=0,mdTimers={},fileCaps={get:false,put:false,max:0};
+function mdEditor(p,ph){
+  var b=function(label,title,a,z){return '<button type="button" class="mdb" title="'+title+'" onclick="mdWrap(\''+p+'\',\''+a+'\',\''+z+'\')">'+label+'</button>';};
+  return '<div class="mdtools">'+b('<b>B</b>','Bold','**','**')+b('<i>I</i>','Italic','*','*')+
+    b('<s>S</s>','Strike','~~','~~')+b('H','Heading','## ','')+b('&bull;','List','- ','')+
+    b('&rdquo;','Quote','&gt; ','')+b('&#128279;','Link','[','](https://)')+
+    (fileCaps.put?'<button type="button" class="mdb" title="Image" onclick="el(\''+p+'-file\').click()">&#128247;</button>'+
+      '<input type="file" id="'+p+'-file" accept="image/*" style="display:none" onchange="mdAttach(\''+p+'\',this)">':'')+
+    '<span class="sp"></span><span class="mdtabs"><button type="button" class="mdb on" id="'+p+'-tw" onclick="mdTab(\''+p+'\',0)">Write</button>'+
+    '<button type="button" class="mdb" id="'+p+'-tp" onclick="mdTab(\''+p+'\',1)">Preview</button></span></div>'+
+    '<div class="mdpane" id="'+p+'-pane"><textarea id="'+p+'-text" placeholder="'+esc(ph)+'" oninput="mdLive(\''+p+'\')"></textarea>'+
+    '<div class="mdprev body md" id="'+p+'-prev"><span class="dim">The preview shows here.</span></div></div>'+
+    '<div class="mdcount" id="'+p+'-count"></div>';
+}
+function mdTab(p,i){
+  var pane=el(p+'-pane');if(!pane)return;
+  pane.className='mdpane'+(i?' prev':'');
+  el(p+'-tw').className='mdb'+(i?'':' on');el(p+'-tp').className='mdb'+(i?' on':'');
+  if(i)mdLive(p,true);
+}
+/* Typing in the editor: the preview and the counter, a beat after the keys. */
+function mdLive(p,now){
+  if(mdTimers[p])clearTimeout(mdTimers[p]);
+  var run=function(){
+    mdTimers[p]=null;
+    var ta=el(p+'-text');if(!ta)return;
+    var text=mdToWire(ta.value),prev=el(p+'-prev'),cnt=el(p+'-count'),go=el(p+'-go');
+    if(prev)prev.innerHTML=text?mdHtml(text):'<span class="dim">The preview shows here.</span>';
+    var sp=splitParts(p==='bl'?blogHead():forumHead(),text);
+    if(cnt){cnt.className='mdcount'+(sp.why&&text?' over':'');
+      cnt.textContent=!text?'':u8(text).length+' bytes \u00b7 '+(sp.why?sp.why:sp.count+' of 9 packets');}
+    if(go)go.disabled=!!(sp.why&&text);
+  };
+  if(now)run();else mdTimers[p]=setTimeout(run,150);
+}
+/* The selection wrapped in a and z, or a line started with a. */
+function mdWrap(p,a,z){
+  var ta=el(p+'-text');if(!ta)return;
+  a=a.replace('&gt;','>');
+  var s=ta.selectionStart||0,e=ta.selectionEnd||0,v=ta.value,sel=v.slice(s,e);
+  if(!z&&s>0&&v[s-1]!=='\n'){a='\n'+a;}
+  ta.value=v.slice(0,s)+a+sel+z+v.slice(e);
+  var at=s+a.length+sel.length;try{ta.focus();ta.setSelectionRange(sel?at+z.length:s+a.length,sel?at+z.length:s+a.length);}catch(x){}
+  mdLive(p);
+}
+function mdInsert(p,t){
+  var ta=el(p+'-text');if(!ta)return;
+  var s=ta.selectionStart==null?ta.value.length:ta.selectionStart,v=ta.value;
+  var pre=s>0&&v[s-1]!=='\n'?'\n':'';
+  ta.value=v.slice(0,s)+pre+t+'\n'+v.slice(s);
+  try{ta.focus();var at=s+pre.length+t.length+1;ta.setSelectionRange(at,at);}catch(x){}
+  mdLive(p,true);
+}
+/* Is the visitor writing in it? Then a feed refresh must leave it alone. */
+function mdBusy(p){
+  var t=el(p+'-text'),ti=el(p+'-title'),a=document.activeElement;
+  return !!(t&&(t.value||(ti&&ti.value)||a===t||a===ti));
+}
+function mdExtOf(name,type){
+  var m=/\.([A-Za-z0-9]{1,8})$/.exec(name||'');if(m)return m[1].toLowerCase().replace('jpeg','jpg');
+  return ({'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'})[type]||'bin';
+}
+/* A photo straight off a phone is megabytes; the mesh wants kilobytes, and a
+ * board keeps 96 kB at most. Past 1600 pixels, 400 kB or the station's own
+ * max (/api/services file.max) it is redrawn as a JPEG, smaller each step
+ * until it fits. A GIF is left as it is. cb(blob, name). */
+function mdShrink(f,cb){
+  var cap=fileCaps.max||0;
+  if(!/^image\/(jpeg|png|webp)$/.test(f.type||''))return cb(f,f.name);
+  var url;try{url=URL.createObjectURL(f);}catch(e){return cb(f,f.name);}
+  var im=new Image();
+  im.onerror=function(){cb(f,f.name);};
+  im.onload=function(){
+    var w=im.naturalWidth,h=im.naturalHeight,big=Math.max(w,h);
+    try{URL.revokeObjectURL(url);}catch(e){}
+    if(big<=1600&&f.size<=400000&&(!cap||f.size<=cap))return cb(f,f.name);
+    var steps=[[1600,.85],[1280,.8],[1024,.75],[800,.7],[640,.65],[480,.6],[320,.55]],k=0;
+    var name=(f.name||'image').replace(/\.[^.]*$/,'')+'.jpg';
+    var next=function(){
+      if(k>=steps.length)return cb(f,f.name);
+      var s=steps[k++],r=Math.min(1,s[0]/big);
+      try{
+        var c=document.createElement('canvas');c.width=Math.round(w*r);c.height=Math.round(h*r);
+        c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+        if(!c.toBlob)return cb(f,f.name);
+        c.toBlob(function(b){
+          if(!b)return cb(f,f.name);
+          if((cap&&b.size>cap)||(!cap&&b.size>400000))return next();
+          cb(b.size<f.size?b:f,b.size<f.size?name:f.name);
+        },'image/jpeg',s[1]);
+      }catch(e){cb(f,f.name);}
+    };
+    next();
+  };
+  im.src=url;
+}
+function mdAttach(p,inp){
+  var f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+  mdShrink(f,function(blob,name){
+    if(fileCaps.max&&blob.size>fileCaps.max)return snack('Too large for this station: '+Math.round(blob.size/1024)+' kB');
+    var rd=new FileReader();
+    rd.onload=function(){
+      var bytes=new Uint8Array(rd.result),ref=refOf(bytes,mdExtOf(name,blob.type));
+      try{mdBlobs[ref]=URL.createObjectURL(blob);}catch(e){}
+      var alt=(name||'image').replace(/\.[^.]*$/,'').replace(/[\[\]()]/g,' ').slice(0,40);
+      mdInsert(p,'!['+alt+']('+ref+')');
+      mdUpload(ref,bytes,blob.type);
+    };
+    rd.readAsArrayBuffer(blob);
+  });
+}
+/* Store the bytes on the station under their reference (API-HTTP.md
+ * POST /api/xprs/file/<ref>); the station checks the hash. */
+function mdUpload(ref,bytes,type){
+  mdUploading++;
+  var done=function(ok,why){mdUploading--;snack(ok?'Image stored on the station':'The station did not keep the image: '+why);};
+  try{
+    var x=new XMLHttpRequest();
+    x.open('POST','/api/xprs/file/'+ref,true);
+    x.timeout=120000;
+    x.setRequestHeader('Content-Type',type||'application/octet-stream');
+    x.onload=function(){done(x.status===200,replyWhy(x));};
+    x.onerror=x.ontimeout=function(){done(false,'no answer');};
+    x.send(bytes);
+  }catch(e){done(false,String(e));}
+}
+/* Formatted text as this page draws it: images from the browser's own copy or
+ * from the station by reference, files as links, @CALL as a callsign. */
+function mdHtml(text){return mdRender(text,{img:mdImgHtml,file:mdFileHtml,mention:callLink});}
+function mdImgHtml(ref,alt){
+  if(!mdBlobs[ref]&&!fileCaps.get)return mdPh(ref,alt);
+  return '<img class="mdimg" loading="lazy" alt="'+mdEsc(alt)+'" title="'+mdEsc(alt)+'" data-ref="'+ref+
+    '" src="'+(mdBlobs[ref]||'/api/xprs/file/'+ref)+'" onerror="mdImgFail(this)">';
+}
+function mdPh(ref,alt){
+  return '<span class="mdph" data-ref="'+ref+'" data-alt="'+mdEsc(alt)+'" onclick="mdImgTry(this)">&#128444; '+
+    mdEsc(alt||'image')+' <small>not on this station &middot; tap to try</small></span>';
+}
+function mdImgFail(img){img.outerHTML=mdPh(img.getAttribute('data-ref'),img.getAttribute('alt'));}
+function mdImgTry(sp){
+  var ref=sp.getAttribute('data-ref'),alt=sp.getAttribute('data-alt')||'';
+  sp.outerHTML='<img class="mdimg" alt="'+mdEsc(alt)+'" data-ref="'+ref+'" src="/api/xprs/file/'+ref+'" onerror="mdImgFail(this)">';
+}
+function mdFileHtml(ref,label){
+  return '<a class="pill link" href="/api/xprs/file/'+ref+'" target="_blank" rel="noopener" download="'+mdEsc(label)+'" title="'+ref+'">&#128206; '+mdEsc(label)+'</a>';
 }
 // ---- blog (XPRS.md 18): the posts the station holds, newest first --------
 // A post is a t:blog packet: published, kept, listed and read later by people
@@ -3156,27 +3509,33 @@ function markBlogSeen(){
   var i;blogSeen={};for(i=0;i<blogs.length;i++)blogSeen[blogs[i].id]=1;
   stSet('xprs_blog_seen',JSON.stringify(blogSeen));}
 /* The posts as cards: the slug read as words (18.1 keeps the human title in
- * the text, and the wire has only the label), the text, who and when. */
+ * the text, and the wire has only the label), the text, who and when. The
+ * visitor's own posts the station's archive has not filed yet come first. */
 function blogCards(){
-  var h='',now=Math.floor(Date.now()/1000),i,shown=0;
+  var h=pendCards(pendFor('','',blogs)),i,shown=0;
   for(i=0;i<blogs.length;i++){var p=blogs[i];
     if(modRemoved[p.id]||modAway[baseCall(p.from)])continue;
-    shown++;
-    var badge=p.sig==='verified'?'<span class="badge ok">signed</span>':
-              (p.sig==='none'?'<span class="badge bad">unsigned</span>':'');
-    h+='<div class="alert post" data-id="'+esc(p.id)+'">'+
-      '<div class="l1"><span>'+esc(p.title?p.title.replace(/-/g,' '):'untitled')+'</span>'+badge+
-      (p.edited?'<span class="pill">edited</span>':'')+
-      '<span class="sp"></span><span class="when">'+(p.ts?esc(ago(now-p.ts))+' ago':'')+'</span></div>'+
-      '<div class="body">'+esc(p.text)+'</div>'+
-      '<div class="l2">'+callLink(p.from)+
-      (p.tags?p.tags.split(',').map(function(t){return '<span class="pill">'+esc(t)+'</span>';}).join(''):'')+
-      (p.file?'<span class="pill" title="'+esc(p.file)+'">&#128206; '+esc(p.file.split('.').pop())+'</span>':'')+
-      '</div></div>';
+    shown++;h+=blogCard(p);
   }
-  if(!shown)return '<div class="card"><div class="empty">No posts yet.</div></div>';
+  if(!shown&&!h)return '<div class="card"><div class="empty">No posts yet.</div></div>';
   return h;
 }
+function blogCard(p){
+  var now=Math.floor(Date.now()/1000);
+  var badge=p.sig==='verified'?'<span class="badge ok">signed</span>':
+            (p.sig==='none'?'<span class="badge bad">unsigned</span>':'');
+  return '<div class="alert post'+(p.pend?' pend '+p.state:'')+'" data-id="'+esc(p.id)+'">'+
+    '<div class="l1"><span>'+esc(p.title?p.title.replace(/-/g,' '):'untitled')+'</span>'+badge+
+    (p.edited?'<span class="pill">edited</span>':'')+
+    '<span class="sp"></span><span class="when">'+(p.ts?esc(ago(now-p.ts))+' ago':'')+'</span></div>'+
+    '<div class="body md">'+mdHtml(p.text)+'</div>'+
+    '<div class="l2">'+callLink(p.from)+
+    (p.tags?p.tags.split(',').map(function(t){return '<span class="pill">'+esc(t)+'</span>';}).join(''):'')+
+    (p.file?mdFileHtml(p.file,p.file.split('.').pop()):'')+
+    pendPills(p)+'</div></div>';
+}
+/* Pending posts as cards: a topic or a post as a post, a comment as one. */
+function pendCards(list){return list.map(function(p){return p.title?(p.room?postCard(p,true):blogCard(p)):postCard(p,false);}).join('');}
 /* The feed in the conversation column (the Blog entry on the left), and the
  * count beside it. The chat tick is three seconds; a post is not, so the
  * station is asked at most every fifteen unless the visitor just opened it. */
@@ -3188,6 +3547,7 @@ function loadBlogFeed(force){
     if(!d||!d.rows)return;
     if(d.moderation)applyModeration(d.moderation);
     blogs=blogPosts(d.rows);
+    pendPrune(blogs);
     if(curRoom==='blog'){markBlogSeen();if(!el('composer'))el('msgs').innerHTML=blogCards();}
     var b=el('blogroom');if(b)b.innerHTML=blogLabel();
   });

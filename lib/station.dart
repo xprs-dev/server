@@ -277,6 +277,8 @@ class Station {
     selfCallsign: () => MeshService.instance.tableCallsign,
     keyOf: keyFor,
     appPath: () => null,
+    // Files by reference (API-HTTP.md): the mesh's own content store.
+    fileStore: () => MeshService.instance.media,
     // The administrator and the visitor settings live with the station's.
     store: _store,
     isLocalPeer: isLocalPeer,

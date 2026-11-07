@@ -134,8 +134,12 @@ class WebChatServer implements AcmeWebServer {
   Future<void> _api(HttpRequest req) async {
     final res = req.response;
     var body = '';
+    Uint8List? raw;
+    // A file by reference (API-HTTP.md) is bytes, up to the API's own cap.
+    final isFile = req.uri.path.startsWith(WebChatApi.filePath);
+    final cap = isFile ? api.fileMax : maxBody;
     if (req.method == 'POST') {
-      if (req.contentLength > maxBody) {
+      if (req.contentLength > cap) {
         res.statusCode = HttpStatus.requestEntityTooLarge;
         await res.close();
         return;
@@ -143,13 +147,17 @@ class WebChatServer implements AcmeWebServer {
       final chunks = <int>[];
       await for (final c in req) {
         chunks.addAll(c);
-        if (chunks.length > maxBody) {
+        if (chunks.length > cap) {
           res.statusCode = HttpStatus.requestEntityTooLarge;
           await res.close();
           return;
         }
       }
-      body = utf8.decode(chunks, allowMalformed: true);
+      if (isFile) {
+        raw = Uint8List.fromList(chunks);
+      } else {
+        body = utf8.decode(chunks, allowMalformed: true);
+      }
     }
     // Behind a reverse proxy the socket's peer is the proxy; the per-visitor
     // rate limit wants the visitor. Trusted only from loopback.
@@ -160,7 +168,17 @@ class WebChatServer implements AcmeWebServer {
     }
     final reply = await api.handle(
         req.method, req.uri.path, req.uri.queryParameters, body,
-        peer: peer);
+        peer: peer, raw: raw);
+    if (reply.bytes != null) {
+      res.statusCode = reply.status;
+      res.headers.set(HttpHeaders.contentTypeHeader, reply.contentType!);
+      res.headers.set('Access-Control-Allow-Origin', '*');
+      reply.headers.forEach(res.headers.set);
+      res.contentLength = reply.bytes!.length;
+      if (req.method != 'HEAD') res.add(reply.bytes!);
+      await res.close();
+      return;
+    }
     final bytes = utf8.encode(jsonEncode(reply.json));
     res
       ..statusCode = reply.status
