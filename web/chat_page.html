@@ -301,6 +301,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 }
 .messages{flex:1;overflow-y:auto;padding:12px;display:flex;
         flex-direction:column;gap:8px}
+/* Scroll bars in the page's own colours wherever something scrolls (a long
+   Blog, the rooms, a view): thin, the thumb in --dim, no track. */
+*{scrollbar-width:thin;scrollbar-color:var(--dim) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:8px;
+        border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
 /* A short conversation sits above the composer, where the eye already is,
    not at the top of an empty screen. margin-top:auto rather than
    justify-content:flex-end, which stops a column from scrolling. */
@@ -2725,6 +2734,13 @@ function drawAdmin(d){
       radio('ad-alert','everyone',wa,'Anyone may post an alert',
         'A warning is relayed up to nine times; this lends the station&rsquo;s standing to anybody.',
         "adminSet({who_may_alert:'everyone'})")+'</div>';
+    /* A switch the station's program defines for itself (API-HTTP.md
+     * host switches): only a station that has it reports it. */
+    if('auto_update' in s)h+='<h3>Updates</h3><div class="card">'+
+      '<label class="opt"><input type="checkbox" id="ad-au"'+(s.auto_update?' checked':'')+
+      ' onchange="adminSet({auto_update:this.checked})"><span>Install new versions automatically'+
+      '<small>Every six hours the station looks for a newer release of its program, installs it and restarts; '+
+      'the old program comes back if the new one does not start.</small></span></label></div>';
     /* The mesh (docs/plan-mesh-trust.md): how far away a kind may come from
      * and still be kept, whose words are fetched from anywhere, and which
      * stations this one exchanges records with. */

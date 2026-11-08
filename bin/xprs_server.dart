@@ -14,14 +14,17 @@
  * desktop profile on the same machine.
  */
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:xprs_core/src/services/log_service.dart';
+import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 import 'package:xprs_server/autostart/autostart.dart';
 import 'package:xprs_server/cli/cli.dart';
 import 'package:xprs_server/config/server_config.dart';
+import 'package:xprs_server/host/file_key_value_store.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
 import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
 import 'package:xprs_server/autostart/systemd.dart';
@@ -37,6 +40,11 @@ bool _up = false;
 
 /// Set in the child when the server re-launched itself with a new HOME.
 const _childMark = 'XPRS_SERVER_CHILD';
+
+/// The station's settings file under its HOME (the administrator's settings
+/// among them; FileKeyValueStore).
+String settingsPathFor(String home) =>
+    '$home/.local/share/xprs/server_settings.json';
 
 Future<void> main(List<String> argv) async {
   await runZonedGuarded(
@@ -141,7 +149,7 @@ Future<void> _run(
 
   final station = Station(
     StationConfig(
-      settingsPath: '$home/.local/share/xprs/server_settings.json',
+      settingsPath: settingsPathFor(home),
       rnsPort: config.rnsPort,
       hubs: config.hubs.isEmpty ? null : config.hubs,
       nickname: config.nickname,
@@ -250,6 +258,12 @@ Future<void> _update(Invocation inv, ServerConfig config) async {
     throw UpdateException(
         'this is the Dart VM, not the compiled server; nothing to update');
   }
+  final home = config.dataDir ?? Platform.environment['HOME'] ?? '.';
+  if (!inv.force && !await _adminAllowsUpdates(settingsPathFor(home))) {
+    stdout.writeln('automatic updates are switched off in Administration '
+        '(xprs-server update --force installs anyway)');
+    return;
+  }
   final updater = Updater(
     channel: channel,
     current: kServerVersion,
@@ -277,6 +291,21 @@ Future<void> _update(Invocation inv, ServerConfig config) async {
     }
   } finally {
     updater.close();
+  }
+}
+
+/// The administrator's switch (Administration, Updates): the `auto_update`
+/// host switch the station keeps with its settings (WebChatApi.hostSwitches).
+/// No file, no setting, or a damaged one: on.
+Future<bool> _adminAllowsUpdates(String settingsPath) async {
+  if (!File(settingsPath).existsSync()) return true;
+  final store = await FileKeyValueStore.open(settingsPath);
+  final raw = store.getString(WebChatApi.settingsKey);
+  if (raw == null) return true;
+  try {
+    return (jsonDecode(raw) as Map)['auto_update'] != false;
+  } catch (_) {
+    return true;
   }
 }
 

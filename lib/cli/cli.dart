@@ -81,7 +81,10 @@ ArgParser buildParser() => ArgParser()
   ..addFlag('system', negatable: false, help: 'service for the whole machine')
   ..addFlag('user', negatable: false, help: 'service for this user only')
   ..addFlag('dry-run', negatable: false, help: 'show what would change')
-  ..addFlag('force', negatable: false, help: 'overwrite an existing file')
+  ..addFlag('force',
+      negatable: false,
+      help: 'init-config: overwrite an existing file; update: install although '
+          'Administration switched updates off')
   ..addFlag('help', abbr: 'h', negatable: false);
 
 String usage() {

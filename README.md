@@ -38,12 +38,14 @@ the binary for this machine is downloaded, its `.sha256` checked, installed
 in place and the service restarted; if the new program does not stay up,
 the old one comes back and the failed binary is kept as `xprs-server.failed`.
 `auto_update` in the config picks `stable` (releases marked latest, the
-default), `beta` (every release) or `off`. By hand at any time:
+default), `beta` (every release) or `off`, and the administrator can switch
+automatic updates off from the page (Administration, Updates). By hand at
+any time:
 
 ```sh
 xprs-server --version
 sudo xprs-server update --dry-run     # what is on GitHub, change nothing
-sudo xprs-server update               # install it now
+sudo xprs-server update               # install it now (--force: even when switched off in Administration)
 ```
 
 Downloading a release and running `sudo ./xprs-server install-service`

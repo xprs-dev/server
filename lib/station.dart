@@ -299,6 +299,9 @@ class Station {
     fileStore: () => MeshService.instance.media,
     // The administrator and the visitor settings live with the station's.
     store: _store,
+    // Administration, Updates: whether `xprs-server update` (the timer's
+    // job) installs newer releases. Read back in bin/xprs_server.dart.
+    hostSwitches: const {'auto_update': true},
     isLocalPeer: isLocalPeer,
     // XPRS.md 10.10: the station is the group of its own rooms. Its key signs
     // the administrator's acts, and they go out like any of its packets.
