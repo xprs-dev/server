@@ -268,11 +268,29 @@ class Station {
   WebChatApi _webChatApi() => WebChatApi(
     publicRows: archivePublicRows,
     held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
+    // A visitor's wire is heard on `lan`, through the API: the bearer is the
+    // network it came in on, and that it came through the page is the
+    // core's internal flag (XprsIngest.heard `viaApi`), never a wire word.
     receive: (w) => PacketGateway.instance.receive(
       Uint8List.fromList(utf8.encode(w)),
-      bearer: 'wifi',
+      bearer: 'lan',
       lane: RxLane.datagram,
+      viaApi: true,
     ),
+    receiveFrom: (w, {required local}) => PacketGateway.instance.receive(
+      Uint8List.fromList(utf8.encode(w)),
+      bearer: 'lan',
+      lane: RxLane.datagram,
+      viaApi: true,
+      localLink: local,
+    ),
+    // A visitor who proved their key is at this station's ear (12.8.1), and
+    // the station may be their mailbox (12.7, 13.0.2).
+    onVisitor: (call, {required local}) =>
+        MeshService.instance.visitorHeard(call, local: local),
+    holdersOf: XprsArchive.instance.holdersFor,
+    offerMailbox: MeshService.instance.offerMailbox,
+    mailFor: MeshService.instance.mailFor,
     mayAir: XprsPublisher.instance.mayAir,
     selfCallsign: () => MeshService.instance.tableCallsign,
     keyOf: keyFor,
