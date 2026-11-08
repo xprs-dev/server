@@ -18,7 +18,11 @@ const commands = <String, String>{
   'uninstall-service': 'remove the boot service (--system or --user)',
   'service-status': 'show whether the boot service is running',
   'update': 'install a newer release from GitHub (--dry-run: only look)',
+  'names-release': 'free a station name whose key was lost: names-release X3ABCD',
 };
+
+/// Commands that take one argument after their name.
+const _withArgument = {'names-release'};
 
 class Invocation {
   Invocation({
@@ -30,6 +34,7 @@ class Invocation {
     required this.force,
     required this.scope,
     required this.version,
+    this.argument,
   });
 
   final String command;
@@ -46,6 +51,9 @@ class Invocation {
 
   /// --version: print the version and stop.
   final bool version;
+
+  /// The argument of a command that takes one (names-release X3ABCD).
+  final String? argument;
 }
 
 ArgParser buildParser() => ArgParser()
@@ -77,6 +85,8 @@ ArgParser buildParser() => ArgParser()
       help: 'which releases `update` installs (default stable)')
   ..addOption('update-repo',
       help: 'GitHub repository with the releases (default xprs-dev/server)')
+  ..addOption('names-keeper',
+      help: 'the keeper that names this station (default https://names.xprs.dev; "" for none)')
   ..addFlag('version', negatable: false, help: 'print the version')
   ..addFlag('system', negatable: false, help: 'service for the whole machine')
   ..addFlag('user', negatable: false, help: 'service for this user only')
@@ -99,12 +109,16 @@ String usage() {
 /// [FormatException] (unknown flag, from package:args).
 Invocation parseInvocation(List<String> argv) {
   final r = buildParser().parse(argv);
-  if (r.rest.length > 1) {
-    throw ConfigException('one command at a time, got: ${r.rest.join(' ')}');
-  }
   final command = r.rest.isEmpty ? 'run' : r.rest.first;
   if (!commands.containsKey(command)) {
     throw ConfigException("unknown command '$command' (try --help)");
+  }
+  final takesOne = _withArgument.contains(command);
+  if (r.rest.length > (takesOne ? 2 : 1)) {
+    throw ConfigException('one command at a time, got: ${r.rest.join(' ')}');
+  }
+  if (takesOne && r.rest.length != 2) {
+    throw ConfigException('$command needs one argument: ${commands[command]}');
   }
   if ((r['system'] as bool) && (r['user'] as bool)) {
     throw ConfigException('--system and --user exclude each other');
@@ -141,6 +155,7 @@ Invocation parseInvocation(List<String> argv) {
   if (r.wasParsed('acme-email')) o['acme_email'] = r['acme-email'];
   if (r.wasParsed('auto-update')) o['auto_update'] = r['auto-update'];
   if (r.wasParsed('update-repo')) o['update_repo'] = r['update-repo'];
+  if (r.wasParsed('names-keeper')) o['names_keeper'] = r['names-keeper'];
 
   return Invocation(
     command: command,
@@ -155,5 +170,6 @@ Invocation parseInvocation(List<String> argv) {
         ? ServiceScope.user
         : null,
     version: r['version'] as bool,
+    argument: takesOne ? r.rest[1] : null,
   );
 }

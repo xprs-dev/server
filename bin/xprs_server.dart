@@ -18,13 +18,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:reticulum/reticulum.dart' show NostrCrypto;
 import 'package:xprs_core/src/services/log_service.dart';
+import 'package:xprs_core/src/services/names/desec_dns_io.dart';
+import 'package:xprs_core/src/services/names/names_client_io.dart';
+import 'package:xprs_core/src/services/names/names_keeper.dart';
+import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 import 'package:xprs_server/autostart/autostart.dart';
 import 'package:xprs_server/cli/cli.dart';
 import 'package:xprs_server/config/server_config.dart';
 import 'package:xprs_server/host/file_key_value_store.dart';
+import 'package:xprs_server/host/zx_names_store.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
 import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
 import 'package:xprs_server/autostart/systemd.dart';
@@ -45,6 +51,10 @@ const _childMark = 'XPRS_SERVER_CHILD';
 /// among them; FileKeyValueStore).
 String settingsPathFor(String home) =>
     '$home/.local/share/xprs/server_settings.json';
+
+/// The names keeper's files under its HOME: the record store and the
+/// operator's release requests (`names-release`, bin only, never the network).
+String namesDirFor(String home) => '$home/.local/share/xprs/names';
 
 Future<void> main(List<String> argv) async {
   await runZonedGuarded(
@@ -114,6 +124,7 @@ Future<void> _main(List<String> argv) async {
     return;
   }
   if (inv.command == 'update') return _update(inv, config);
+  if (inv.command == 'names-release') return _namesRelease(inv, config);
   await _run(config, argv, configPath);
 }
 
@@ -176,6 +187,39 @@ Future<void> _run(
   _up = true;
   unawaited(station.startNetwork());
 
+  // The names keeper (XPRS.md 13.0.3): this server keeps <callsign>.<zone>
+  // for every station that proves its key. One server does this.
+  NamesKeeper? keeper;
+  ZxNamesStore? namesStore;
+  DesecDns? desec;
+  Timer? namesTimer;
+  final zone = config.namesZone, token = config.namesToken;
+  if (zone != null && token != null) {
+    final npub = station.ownNpub;
+    if (npub == null) {
+      LogService.instance.add('names: this station has no key yet; keeper off');
+    } else {
+      namesStore = ZxNamesStore.open('${namesDirFor(home)}/names.zx');
+      desec = DesecDns(zone: zone, token: token);
+      keeper = NamesKeeper(
+        zone: zone,
+        store: namesStore,
+        dns: desec,
+        ownCallsign: station.callsign,
+        ownKeyHex: NostrCrypto.decodeNpub(npub).toLowerCase(),
+        log: LogService.instance.add,
+      );
+      api.names = keeper;
+      final k = keeper;
+      namesTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+        await _namesReleaseRequests(k, namesDirFor(home));
+        await k.sweep();
+      });
+      LogService.instance.add(
+          'names: keeping $zone (${namesStore.length} names) for other stations');
+    }
+  }
+
   PublicName? publicName;
   if (config.publicName) {
     publicName = PublicName(
@@ -200,6 +244,25 @@ Future<void> _run(
     // The page's Station view: where the internet reaches this web chat and
     // which names still wait for the router.
     api.addresses = () => WebAddresses(urls: pn.urls, pending: pn.pending);
+    // Its own name: from the keeper it is, or from the keeper it asks.
+    if (keeper != null) {
+      final k = keeper;
+      pn.extraNames = ({v4, v6}) => k.keepOwn(v4: v4, v6: v6);
+    } else if (config.namesKeeper.isNotEmpty) {
+      final client = NamesClient(
+        NamesClientOptions(
+          keeper: config.namesKeeper,
+          callsign: () => station.callsign,
+          npub: () => station.ownNpub ?? '',
+          sign: (p) {
+            final d = xprsProfileScalar();
+            return d == null ? null : xprsSign(p, d);
+          },
+        ),
+        log: LogService.instance.add,
+      );
+      pn.extraNames = ({v4, v6}) => client.claim(v4: v4, v6: v6);
+    }
     await publicName.start();
     station.alsoLocal = (peer) {
       final v4 = pn.publicIPv4;
@@ -215,6 +278,9 @@ Future<void> _run(
   }
   await done.future;
   LogService.instance.add('server: stopping');
+  namesTimer?.cancel();
+  namesStore?.close();
+  desec?.close();
   await publicName?.stop();
   await web.stop();
   await station.stop();
@@ -294,6 +360,56 @@ Future<void> _update(Invocation inv, ServerConfig config) async {
     }
   } finally {
     updater.close();
+  }
+}
+
+/// `xprs-server names-release X3ABCD`: the operator frees a label whose key
+/// was lost. A local command: it leaves a request in the keeper's directory,
+/// which the running keeper acts on within a minute (the record store is the
+/// keeper's alone). Nothing on the network can do this.
+Future<void> _namesRelease(Invocation inv, ServerConfig config) async {
+  if (config.namesZone == null) {
+    throw ConfigException('this server keeps no names (names_zone is not set)');
+  }
+  final call = (inv.argument ?? '').trim().toUpperCase().split('-').first;
+  if (!RegExp(r'^X[1-5][0-9A-Z]{2,5}$').hasMatch(call)) {
+    throw ConfigException("'${inv.argument}' is not a callsign");
+  }
+  final home = config.dataDir ?? Platform.environment['HOME'] ?? '.';
+  final f = File('${namesDirFor(home)}/release.txt');
+  if (inv.dryRun) {
+    stdout.writeln('[dry run] would ask the keeper to free ${call.toLowerCase()}.${config.namesZone}');
+    return;
+  }
+  try {
+    await f.parent.create(recursive: true);
+    await f.writeAsString('$call\n', mode: FileMode.append, flush: true);
+  } on FileSystemException catch (e) {
+    throw ConfigException('cannot write ${f.path}: ${e.osError?.message ?? e.message}'
+        ' (the system service keeps its files as root: sudo)');
+  }
+  stdout.writeln('asked the keeper to free ${call.toLowerCase()}.${config.namesZone}; '
+      'it acts within a minute (journalctl -u xprs-server)');
+}
+
+/// The keeper reads the operator's release requests and frees each label.
+Future<void> _namesReleaseRequests(NamesKeeper k, String dir) async {
+  final f = File('$dir/release.txt');
+  if (!f.existsSync()) return;
+  final List<String> lines;
+  try {
+    lines = await f.readAsLines();
+    await f.delete();
+  } on FileSystemException catch (e) {
+    LogService.instance.add('names: cannot read release requests: $e');
+    return;
+  }
+  for (final l in lines) {
+    final call = l.trim();
+    if (call.isEmpty) continue;
+    final done = await k.release(call);
+    LogService.instance.add(
+        'names: operator release of $call: ${done ? 'freed' : 'no such name'}');
   }
 }
 

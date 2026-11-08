@@ -349,6 +349,12 @@ class Station {
   /// station never hears its own identity, so without the fallback it could
   /// not verify the acts it signs itself (XPRS.md 10.10: appointing a
   /// moderator), and XprsGroups dropped them as unverified.
+  /// This station's own public key as an npub, or null before it has one.
+  String? get ownNpub {
+    final n = ProfileService.instance.activeProfile?.npub ?? '';
+    return n.startsWith('npub1') ? n : null;
+  }
+
   Uint8List? keyFor(String call) {
     final heard = XprsArchive.instance.keyResolver?.call(call);
     if (heard != null) return heard;

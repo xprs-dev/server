@@ -19,6 +19,9 @@ dependencies:
   hex: ^0.2.0
   reticulum:
     path: ../reticulum-dart
+  # zxdb, the names keeper's record store (x1watt/zx, checked out beside xprs).
+  zx:
+    path: ../../x1watt/zx
 
 dev_dependencies:
   test: ^1.25.0

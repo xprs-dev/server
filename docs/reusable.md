@@ -23,4 +23,5 @@ the core; `../core/docs/reusable.md` lists it.
 | `compareSemver` | `lib/update/updater.dart` | the app's `update_models.dart` function, copied: pre-release aware, build metadata ignored. Move to the core when a third host needs it |
 | `renderUpdateService` / `renderUpdateTimer` | `lib/autostart/systemd.dart` | a oneshot service plus a timer with boot delay, period, jitter and `Persistent=true`: the shape for any periodic job the installer should set up |
 | `tool/update_version.dart` + `lib/version.dart` | | the app's pattern: a generated constant from `pubspec.yaml`, with a test that fails when they differ |
-
+| `ZxNamesStore` | `lib/host/zx_names_store.dart` | the core's `NamesStore` over a zxdb key-value store (one `.zx` file, JSON rows, group commit): the shape for any small keyed table a host keeps for the core without SQLite |
+| `_namesRelease` / `_namesReleaseRequests` | `bin/xprs_server.dart` | an operator command that reaches a running service through a request file in the service's own directory, acted on by its tick: the pattern for any local-only administrative act on a sandboxed service |

@@ -510,5 +510,12 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.4"
+  zx:
+    dependency: "direct main"
+    description:
+      path: "../../x1watt/zx"
+      relative: true
+    source: path
+    version: "0.6.0"
 sdks:
   dart: ">=3.13.0 <4.0.0"

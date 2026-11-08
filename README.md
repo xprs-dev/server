@@ -57,6 +57,25 @@ To just try it without installing:
 ./xprs-server --data-dir ~/xprs-data --http-port 8080
 ```
 
+## A name of its own: `<callsign>.xprs.dev`
+
+Every station can have a name that does not change with its address. The
+station asks the names keeper (`names_keeper`, default
+`https://names.xprs.dev`) with a signed claim; its callsign is derived from
+its key, so the claim alone proves the right to the label and nobody
+registers anything (XPRS.md 13.0.3). The name is tested from outside, gets
+its certificate and becomes the station's published link. A label stays
+with its first key for six months after that key's last claim.
+
+One server keeps the zone for everybody: `names_zone` and `names_token`
+(a deSEC token) in its config make it the keeper, reachable at
+`names.<zone>`. Records live in a zxdb store under its data directory. An
+operator frees a label whose key was lost with:
+
+```sh
+sudo xprs-server names-release X3ABCD
+```
+
 ## Build from source
 
 Checked out next to `core`, `reticulum-dart` and `webchat`:

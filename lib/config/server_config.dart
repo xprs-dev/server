@@ -35,6 +35,9 @@ class ServerConfig {
     required this.acmeStaging,
     required this.autoUpdate,
     required this.updateRepo,
+    required this.namesZone,
+    required this.namesToken,
+    required this.namesKeeper,
     required this.sources,
   });
 
@@ -79,6 +82,16 @@ class ServerConfig {
   /// The GitHub repository (`owner/name`) whose releases carry the binary.
   final String updateRepo;
 
+  /// The names keeper (XPRS.md 13.0.3): the zone this server keeps for other
+  /// stations (`xprs.dev`) and the deSEC token that writes it. Both set: this
+  /// server is the keeper. Null: it is not.
+  final String? namesZone;
+  final String? namesToken;
+
+  /// The keeper this station asks for its own name, `https://names.xprs.dev`.
+  /// Empty: it asks none.
+  final String namesKeeper;
+
   /// key -> 'default' | the config file's path | 'command line'.
   final Map<String, String> sources;
 
@@ -98,6 +111,9 @@ class ServerConfig {
     'acme_staging',
     'auto_update',
     'update_repo',
+    'names_zone',
+    'names_token',
+    'names_keeper',
   ];
 
   static const _defaults = <String, Object?>{
@@ -116,6 +132,9 @@ class ServerConfig {
     'acme_staging': false,
     'auto_update': 'stable',
     'update_repo': 'xprs-dev/server',
+    'names_zone': null,
+    'names_token': null,
+    'names_keeper': 'https://names.xprs.dev',
   };
 
   /// Layers [file] then [cli] over the defaults. Both maps use the snake_case
@@ -153,6 +172,9 @@ class ServerConfig {
       acmeStaging: values['acme_staging'] as bool,
       autoUpdate: values['auto_update'] as String,
       updateRepo: values['update_repo'] as String,
+      namesZone: values['names_zone'] as String?,
+      namesToken: values['names_token'] as String?,
+      namesKeeper: values['names_keeper'] as String,
       sources: Map.unmodifiable(src),
     );
   }
@@ -175,6 +197,10 @@ class ServerConfig {
       'acme_staging': acmeStaging,
       'auto_update': autoUpdate,
       'update_repo': updateRepo,
+      'names_zone': namesZone ?? '(not a keeper)',
+      // Never the token itself: print-config goes to terminals and logs.
+      'names_token': namesToken == null ? '(none)' : '(set)',
+      'names_keeper': namesKeeper.isEmpty ? '(none)' : namesKeeper,
     };
     final w = keys.fold<int>(0, (m, k) => k.length > m ? k.length : m);
     return [
@@ -235,6 +261,22 @@ Map<String, Object?> _validate(Map<String, Object?> m, String from) {
           throw bad('a GitHub repository, owner/name');
         }
         out[k] = v.trim();
+      case 'names_zone':
+        if (v is! String ||
+            !RegExp(r'^[a-z0-9-]+(\.[a-z0-9-]+)+$').hasMatch(v.trim().toLowerCase())) {
+          throw bad('a domain name');
+        }
+        out[k] = v.trim().toLowerCase();
+      case 'names_token':
+        if (v is! String || v.trim().isEmpty) throw bad('the deSEC token');
+        out[k] = v.trim();
+      case 'names_keeper':
+        if (v is! String) throw bad('an https:// address, or empty for none');
+        final u = v.trim();
+        if (u.isNotEmpty && !RegExp(r'^https?://[^/\s]+/?$').hasMatch(u)) {
+          throw bad('an https:// address, or empty for none');
+        }
+        out[k] = u.isEmpty ? '' : u.replaceFirst(RegExp(r'/$'), '');
       case 'http_address':
       case 'nickname':
         if (v is! String || v.trim().isEmpty) throw bad('a non-empty string');
@@ -355,6 +397,15 @@ http_port: $httpPort
 #   off     never; update by hand with `xprs-server update`
 # auto_update: stable
 # update_repo: xprs-dev/server
+
+# A name of its own, <callsign>.xprs.dev (XPRS.md 13.0.3): the station asks
+# the names keeper, proving its key; nothing to register. Empty: no name.
+# names_keeper: https://names.xprs.dev
+
+# Keeping the zone for other stations (one server does this): the zone and
+# the deSEC token that writes its records. The token is never printed.
+# names_zone: xprs.dev
+# names_token: ...
 
 # The server's own data directory (identity, archive, settings). The core
 # keeps its tree under HOME, so the server sets HOME to this.
