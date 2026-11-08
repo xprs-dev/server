@@ -196,8 +196,11 @@ Future<void> _run(
       // internet reaches port 443, http:// only when it reaches just 80.
       onUrl: XprsPublisher.instance.setPublicUrl,
     );
-    await publicName.start();
     final pn = publicName;
+    // The page's Station view: where the internet reaches this web chat and
+    // which names still wait for the router.
+    api.addresses = () => WebAddresses(urls: pn.urls, pending: pn.pending);
+    await publicName.start();
     station.alsoLocal = (peer) {
       final v4 = pn.publicIPv4;
       return v4 != null && peer.replaceFirst('::ffff:', '') == v4;

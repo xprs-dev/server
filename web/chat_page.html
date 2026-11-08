@@ -2445,18 +2445,21 @@ function loadStats(){
 
 // Station: what the This-device and Settings panels say, plus the screen.
 function row(k,v){return '<tr><td>'+esc(k)+'</td><td>'+v+'</td></tr>';}
+/* A station without /api/status (the server edition) still has a Station
+ * view: its callsign and, from /api/services, where the internet reaches it. */
 function loadStation(){
   getJSON('/api/status',function(d){
-    if(!d)return fail('v-station','Station status');
+    if(!d||d.ok===false)d={};
+    if(!d.callsign&&!stationCall)return fail('v-station','Station status');
     var h='<h3>Station</h3><table class="kv">'+
-      row('Callsign',esc(d.callsign||''))+
+      row('Callsign',esc(d.callsign||stationCall||''))+
       (stationPos?row('Location','<a href="'+esc(posLink(stationPos))+'" target="_blank" rel="noopener">'+esc(posText(stationPos))+'</a>'):'')+
-      row('Board',esc(d.board||''))+
-      row('Uptime',esc(hms(d.uptime_s||0)))+
-      row('Free memory',esc(kb(d.heap_free)))+
-      row('Clock',d.time&&d.time.synced?
+      (d.board!==undefined?row('Board',esc(d.board||'')):'')+
+      (d.uptime_s!==undefined?row('Uptime',esc(hms(d.uptime_s||0))):'')+
+      (d.heap_free!==undefined?row('Free memory',esc(kb(d.heap_free))):'')+
+      (d.time?row('Clock',d.time.synced?
           esc(new Date(d.time.epoch*1000).toISOString().slice(0,19)
-              .replace('T',' '))+' UTC':'<span class="dim">not synced</span>');
+              .replace('T',' '))+' UTC':'<span class="dim">not synced</span>'):'');
     if(d.battery&&d.battery.mv>0){
       // esc() on everything from the wire, exactly as this row did before
       // it grew fields: the surrounding string is raw HTML by design (see
@@ -2499,14 +2502,34 @@ function loadStation(){
     el('v-station').innerHTML=h+'<div id="st-more"></div>';
     getJSON('/api/services',function(sv){
       if(!sv||!sv.features)return;
-      var f=sv.features,k,h2='<h3>Roles</h3><table class="kv">';
-      for(k in f)h2+=row(k,f[k]?'on':'<span class="dim">off</span>');
-      h2+='</table>';
+      var f=sv.features,k,h2='',i2;
+      /* Where the internet reaches this station (API-HTTP.md urls,
+       * urls_pending): the links to hand out, and the names still waiting
+       * for the router to let their ports in. */
+      if(sv.urls||sv.urls_pending){
+        var us=sv.urls||[],ps=sv.urls_pending||[];
+        h2+='<h3>Web address</h3><table class="kv">';
+        for(i2=0;i2<us.length;i2++)
+          h2+=row(i2?'':'Reachable at','<a href="'+esc(us[i2])+'">'+esc(us[i2])+'</a>');
+        if(!us.length)h2+=row('Reachable at','<span class="dim">not from the internet yet</span>');
+        for(i2=0;i2<ps.length;i2++)
+          h2+=row(i2?'':'Not reachable yet','<span class="dim">'+esc(ps[i2])+'</span>');
+        h2+='</table>';
+        if(ps.length)h2+='<p class="dim">A name works once the router lets TCP ports 80 and 443 in to this machine '+
+          'for that address; the station tests it again by itself.</p>';
+      }
+      var hasF=false;for(k in f){hasF=true;break;}
+      if(hasF){
+        h2+='<h3>Roles</h3><table class="kv">';
+        for(k in f)h2+=row(k,f[k]?'on':'<span class="dim">off</span>');
+        h2+='</table>';
+      }
       if(sv.serve&&sv.serve.length)
         h2+='<p class="dim">Announced to others: '+esc(sv.serve.join(', '))+'</p>';
-      h2+='<h3>Screen</h3><img class="shot" alt="the station screen" '+
+      /* The screen, heading and all, only on a station that has one. */
+      h2+='<div id="st-screen"><h3>Screen</h3><img class="shot" alt="the station screen" '+
           'src="/api/screen?t='+Date.now()+'" '+
-          'onerror="this.parentNode.removeChild(this)">';
+          'onerror="var d=el(\'st-screen\');if(d)d.parentNode.removeChild(d)"></div>';
       var m=el('st-more'); if(m)m.innerHTML=h2;
     });
   });
