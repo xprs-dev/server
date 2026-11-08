@@ -32,9 +32,22 @@ That is the whole install: the program carries its web page inside itself, so
 there is nothing else to download. It needs `libsqlite3` at run time (Debian:
 `sudo apt install libsqlite3-0`).
 
-**Update:** download the new `xprs-server` and run `sudo ./xprs-server
-install-service` again. It replaces the installed copy and restarts the
-service; your config file and data are kept.
+**Update:** it happens by itself. The installer adds a timer that runs
+`xprs-server update` every six hours: when a newer release is on GitHub,
+the binary for this machine is downloaded, its `.sha256` checked, installed
+in place and the service restarted; if the new program does not stay up,
+the old one comes back and the failed binary is kept as `xprs-server.failed`.
+`auto_update` in the config picks `stable` (releases marked latest, the
+default), `beta` (every release) or `off`. By hand at any time:
+
+```sh
+xprs-server --version
+sudo xprs-server update --dry-run     # what is on GitHub, change nothing
+sudo xprs-server update               # install it now
+```
+
+Downloading a release and running `sudo ./xprs-server install-service`
+again still works and keeps your config file and data.
 
 To just try it without installing:
 
@@ -100,6 +113,7 @@ sudo ./xprs-server install-service         # system: port 80, user xprs, sandbox
 xprs-server install-service --dry-run       # show what would change, do nothing
 xprs-server service-status [--user]
 xprs-server uninstall-service [--user]      # keeps your config and data
+xprs-server update [--dry-run]              # install a newer release now
 ```
 
 | System | Status |
@@ -109,7 +123,7 @@ xprs-server uninstall-service [--user]      # keeps your config and data
 | macOS (launchd), Windows | not yet; the same `install-service` command will do it. Prints the manual steps meanwhile |
 
 Installing again updates the binary and restarts the service; your config file
-is never overwritten. After editing the config: `systemctl restart xprs-server`
+is never overwritten. Newer releases install themselves (see Update above). After editing the config: `systemctl restart xprs-server`
 (`systemctl --user restart ...` for a user service).
 
 On a public address, put TLS in front (Caddy, nginx); the server trusts

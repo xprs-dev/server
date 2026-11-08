@@ -33,6 +33,8 @@ class ServerConfig {
     required this.upnp,
     required this.acmeEmail,
     required this.acmeStaging,
+    required this.autoUpdate,
+    required this.updateRepo,
     required this.sources,
   });
 
@@ -70,6 +72,13 @@ class ServerConfig {
   /// Use Let's Encrypt's staging CA (testing; browsers do not trust it).
   final bool acmeStaging;
 
+  /// Which GitHub releases `xprs-server update` installs: stable (releases
+  /// marked latest, no pre-releases), beta (every release) or off.
+  final String autoUpdate;
+
+  /// The GitHub repository (`owner/name`) whose releases carry the binary.
+  final String updateRepo;
+
   /// key -> 'default' | the config file's path | 'command line'.
   final Map<String, String> sources;
 
@@ -87,6 +96,8 @@ class ServerConfig {
     'upnp',
     'acme_email',
     'acme_staging',
+    'auto_update',
+    'update_repo',
   ];
 
   static const _defaults = <String, Object?>{
@@ -103,6 +114,8 @@ class ServerConfig {
     'upnp': true,
     'acme_email': null,
     'acme_staging': false,
+    'auto_update': 'stable',
+    'update_repo': 'xprs-dev/server',
   };
 
   /// Layers [file] then [cli] over the defaults. Both maps use the snake_case
@@ -138,6 +151,8 @@ class ServerConfig {
       upnp: values['upnp'] as bool,
       acmeEmail: values['acme_email'] as String?,
       acmeStaging: values['acme_staging'] as bool,
+      autoUpdate: values['auto_update'] as String,
+      updateRepo: values['update_repo'] as String,
       sources: Map.unmodifiable(src),
     );
   }
@@ -158,6 +173,8 @@ class ServerConfig {
       'upnp': upnp,
       'acme_email': acmeEmail ?? '(none)',
       'acme_staging': acmeStaging,
+      'auto_update': autoUpdate,
+      'update_repo': updateRepo,
     };
     final w = keys.fold<int>(0, (m, k) => k.length > m ? k.length : m);
     return [
@@ -205,6 +222,17 @@ Map<String, Object?> _validate(Map<String, Object?> m, String from) {
       case 'acme_email':
         if (v is! String || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())) {
           throw bad('an e-mail address');
+        }
+        out[k] = v.trim();
+      case 'auto_update':
+        if (v is! String || !['stable', 'beta', 'off'].contains(v.trim())) {
+          throw bad('stable, beta or off');
+        }
+        out[k] = v.trim();
+      case 'update_repo':
+        if (v is! String ||
+            !RegExp(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$').hasMatch(v.trim())) {
+          throw bad('a GitHub repository, owner/name');
         }
         out[k] = v.trim();
       case 'http_address':
@@ -317,6 +345,16 @@ http_port: $httpPort
 
 # Keep public history for other stations (an archiver).
 # public_archiver: true
+
+# Keep the program current from its GitHub releases. The service installer
+# adds a timer that runs `xprs-server update` every six hours: a newer
+# release is downloaded, its digest checked, installed and the service
+# restarted; the old program comes back if the new one does not start.
+#   stable  releases marked latest (no pre-releases)
+#   beta    every release
+#   off     never; update by hand with `xprs-server update`
+# auto_update: stable
+# update_repo: xprs-dev/server
 
 # The server's own data directory (identity, archive, settings). The core
 # keeps its tree under HOME, so the server sets HOME to this.

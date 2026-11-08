@@ -19,3 +19,8 @@ the core; `../core/docs/reusable.md` lists it.
 | `tool/embed_page.dart` + `embeddedPage()` | `tool/`, `lib/web/embedded_page.dart` | shipping a data file inside a `dart compile exe` binary (gzip + base64 in a generated const). Any host that must be a single file |
 | `tool/public_name_check.dart` | | what the public-name loop sees from a machine (public addresses, nip.io names, the UPnP router), changing nothing |
 | `Station.isLocalPeer` | `lib/station.dart` | "is this visitor on our network": private addresses plus the IPv6 /64s the machine holds (read at most once a minute) |
+| `Updater` | `lib/update/updater.dart` | a compiled program that follows its GitHub releases: `/releases/latest` (stable) or `/releases` (beta) by channel, the asset for `uname -m`, the `.sha256` beside it, download and digest check, atomic replace through `.new` keeping `.prev`, restart, and rollback when the service is not active afterwards. `XPRS_UPDATE_API` redirects the API host, so a test serves GitHub from a local `HttpServer` (test/update_test.dart). Any single-binary host (the desktop app's headless mode, a future CLI) can reuse it as is |
+| `compareSemver` | `lib/update/updater.dart` | the app's `update_models.dart` function, copied: pre-release aware, build metadata ignored. Move to the core when a third host needs it |
+| `renderUpdateService` / `renderUpdateTimer` | `lib/autostart/systemd.dart` | a oneshot service plus a timer with boot delay, period, jitter and `Persistent=true`: the shape for any periodic job the installer should set up |
+| `tool/update_version.dart` + `lib/version.dart` | | the app's pattern: a generated constant from `pubspec.yaml`, with a test that fails when they differ |
+

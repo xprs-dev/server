@@ -4,7 +4,7 @@
  *   xprs-server [command] [options]       (xprs-server --help)
  *
  * Commands: run (default), init-config, print-config, install-service,
- * uninstall-service, service-status. Options come from the command line, a
+ * uninstall-service, service-status, update. Options come from the command line, a
  * YAML config file and built-in defaults, in that order (lib/config).
  *
  * The core keeps its files under $HOME/.local/share/xprs (storage_paths.dart),
@@ -24,7 +24,10 @@ import 'package:xprs_server/cli/cli.dart';
 import 'package:xprs_server/config/server_config.dart';
 import 'package:xprs_server/http/web_chat_server.dart';
 import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
+import 'package:xprs_server/autostart/systemd.dart';
 import 'package:xprs_server/station.dart';
+import 'package:xprs_server/update/updater.dart';
+import 'package:xprs_server/version.dart';
 import 'package:xprs_server/web/embedded_page.dart';
 
 /// A station runs unattended: an error nobody awaited is logged, not fatal.
@@ -48,6 +51,9 @@ Future<void> main(List<String> argv) async {
       } on ServiceException catch (e) {
         stderr.writeln('xprs-server: $e');
         exit(1);
+      } on UpdateException catch (e) {
+        stderr.writeln('xprs-server: $e');
+        exit(1);
       }
     },
     (e, st) {
@@ -68,6 +74,10 @@ Future<void> _main(List<String> argv) async {
   }
   if (inv.help) {
     stdout.writeln(usage());
+    return;
+  }
+  if (inv.version) {
+    stdout.writeln('xprs-server $kServerVersion');
     return;
   }
 
@@ -95,6 +105,7 @@ Future<void> _main(List<String> argv) async {
     stdout.writeln(config.describe());
     return;
   }
+  if (inv.command == 'update') return _update(inv, config);
   await _run(config, argv, configPath);
 }
 
@@ -152,7 +163,8 @@ Future<void> _run(
     await web.start(port: config.httpPort, address: address);
   }
 
-  LogService.instance.add('server: ${station.callsign} web chat ready');
+  LogService.instance.add(
+      'server: $kServerVersion, ${station.callsign} web chat ready');
   _up = true;
   unawaited(station.startNetwork());
 
@@ -223,6 +235,49 @@ Future<int> _relaunch(
     sig.watch().listen((s) => p.kill(s));
   }
   return p.exitCode;
+}
+
+/// `xprs-server update [--dry-run]`: the timer's job, also runnable by hand.
+/// The channel and repository come from the config (auto_update, update_repo).
+Future<void> _update(Invocation inv, ServerConfig config) async {
+  final channel = UpdateChannel.parse(config.autoUpdate)!;
+  if (channel == UpdateChannel.off) {
+    stdout.writeln('auto_update is off; nothing to do');
+    return;
+  }
+  final exe = Platform.resolvedExecutable;
+  if (SystemdBackend.isDartVm(exe)) {
+    throw UpdateException(
+        'this is the Dart VM, not the compiled server; nothing to update');
+  }
+  final updater = Updater(
+    channel: channel,
+    current: kServerVersion,
+    exePath: exe,
+    repo: config.updateRepo,
+    log: stdout.writeln,
+  );
+  try {
+    final check = await updater.check();
+    stdout.writeln('${check.describe(updater.arch)} (${channel.name} channel)');
+    if (!check.newer) return;
+    if (inv.dryRun) {
+      stdout.writeln('[dry run] would install ${check.release!.version} over $exe');
+      return;
+    }
+    final backend = AutostartBackend.forPlatform();
+    final scope = await backend.installedScope(exe);
+    final ok = await updater.apply(
+      check,
+      restart: scope == null ? null : () => backend.restart(scope),
+      healthy: scope == null ? null : () => backend.isActive(scope),
+    );
+    if (ok && scope == null) {
+      stdout.writeln('no service runs $exe: restart the server yourself');
+    }
+  } finally {
+    updater.close();
+  }
 }
 
 Future<void> _initConfig(Invocation inv) async {

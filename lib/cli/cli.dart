@@ -17,6 +17,7 @@ const commands = <String, String>{
   'install-service': 'start at boot (--system or --user, --dry-run)',
   'uninstall-service': 'remove the boot service (--system or --user)',
   'service-status': 'show whether the boot service is running',
+  'update': 'install a newer release from GitHub (--dry-run: only look)',
 };
 
 class Invocation {
@@ -28,6 +29,7 @@ class Invocation {
     required this.dryRun,
     required this.force,
     required this.scope,
+    required this.version,
   });
 
   final String command;
@@ -41,6 +43,9 @@ class Invocation {
 
   /// Null when neither --system nor --user was given.
   final ServiceScope? scope;
+
+  /// --version: print the version and stop.
+  final bool version;
 }
 
 ArgParser buildParser() => ArgParser()
@@ -67,6 +72,12 @@ ArgParser buildParser() => ArgParser()
   ..addOption('acme-email', help: "Let's Encrypt contact (optional)")
   ..addFlag('acme-staging',
       negatable: false, help: "Let's Encrypt staging CA (testing)")
+  ..addOption('auto-update',
+      allowed: ['stable', 'beta', 'off'],
+      help: 'which releases `update` installs (default stable)')
+  ..addOption('update-repo',
+      help: 'GitHub repository with the releases (default xprs-dev/server)')
+  ..addFlag('version', negatable: false, help: 'print the version')
   ..addFlag('system', negatable: false, help: 'service for the whole machine')
   ..addFlag('user', negatable: false, help: 'service for this user only')
   ..addFlag('dry-run', negatable: false, help: 'show what would change')
@@ -125,6 +136,8 @@ Invocation parseInvocation(List<String> argv) {
     if (r.wasParsed(flag)) o[key] = r[flag];
   }
   if (r.wasParsed('acme-email')) o['acme_email'] = r['acme-email'];
+  if (r.wasParsed('auto-update')) o['auto_update'] = r['auto-update'];
+  if (r.wasParsed('update-repo')) o['update_repo'] = r['update-repo'];
 
   return Invocation(
     command: command,
@@ -138,5 +151,6 @@ Invocation parseInvocation(List<String> argv) {
         : (r['user'] as bool)
         ? ServiceScope.user
         : null,
+    version: r['version'] as bool,
   );
 }

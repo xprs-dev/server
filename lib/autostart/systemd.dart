@@ -10,6 +10,10 @@
  *
  * The unit is generated from the binary's own path, so installing needs
  * nothing but the binary: the web page is compiled into it.
+ *
+ * Beside the service, a timer (xprs-server-update.timer) runs
+ * `xprs-server update` every six hours so the installation follows the
+ * releases on GitHub (lib/update/updater.dart, config `auto_update`).
  */
 import 'dart:io';
 
@@ -17,6 +21,8 @@ import '../config/server_config.dart';
 import 'autostart.dart';
 
 const _unitName = 'xprs-server.service';
+const _updateService = 'xprs-server-update.service';
+const _updateTimer = 'xprs-server-update.timer';
 
 /// Where each scope keeps its files. Pure, so tests can check them.
 class SystemdLayout {
@@ -44,6 +50,10 @@ class SystemdLayout {
   /// Where the binary is copied (system only; user runs in place).
   final String? installDir;
   final int defaultHttpPort;
+
+  String get _unitDir => unitPath.substring(0, unitPath.lastIndexOf('/'));
+  String get updateServicePath => '$_unitDir/$_updateService';
+  String get updateTimerPath => '$_unitDir/$_updateTimer';
 
   static String _xdg(String? xdg, String home) =>
       (xdg != null && xdg.isNotEmpty) ? xdg : '$home/.config';
@@ -85,6 +95,39 @@ RestartSec=5
 WantedBy=${system ? 'multi-user.target' : 'default.target'}
 ''';
 }
+
+/// The oneshot unit the timer starts: `xprs-server update`, as the user that
+/// owns the binary (root for the system scope, since it writes /opt).
+String renderUpdateService(
+  SystemdLayout l, {
+  required String exe,
+  required String configPath,
+}) =>
+    '''
+[Unit]
+Description=XPRS server: install a newer release (xprs-server update)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${_q(exe)} update --config ${_q(configPath)}
+''';
+
+/// Every six hours, half an hour of jitter, and once ten minutes after boot.
+String renderUpdateTimer(SystemdLayout l) => '''
+[Unit]
+Description=XPRS server: look for a newer release every six hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+''';
 
 class SystemdBackend implements AutostartBackend {
   @override
@@ -195,6 +238,15 @@ class SystemdBackend implements AutostartBackend {
           420,
         );
       }),
+      ServiceStep('write ${l.updateServicePath} and ${l.updateTimerPath}',
+          () async {
+        await _writeFile(
+          l.updateServicePath,
+          renderUpdateService(l, exe: exe, configPath: cfg),
+          420,
+        );
+        await _writeFile(l.updateTimerPath, renderUpdateTimer(l), 420);
+      }),
       if (!system)
         ServiceStep('create data directory ${l.dataDir}', () async {
           await Directory(l.dataDir).create(recursive: true);
@@ -206,6 +258,9 @@ class SystemdBackend implements AutostartBackend {
       ServiceStep('enable at boot and (re)start the service', () async {
         await _systemctl(o.scope, ['enable', _unitName]);
         await _systemctl(o.scope, ['restart', _unitName]);
+      }),
+      ServiceStep('enable the update timer (every six hours)', () async {
+        await _systemctl(o.scope, ['enable', '--now', _updateTimer]);
       }),
     ];
   }
@@ -220,16 +275,24 @@ class SystemdBackend implements AutostartBackend {
       );
     }
     return [
-      ServiceStep('stop and disable the service', () async {
+      ServiceStep('stop and disable the service and the update timer',
+          () async {
         await _systemctl(o.scope, [
           'disable',
           '--now',
           _unitName,
         ], allowFail: true);
+        await _systemctl(o.scope, [
+          'disable',
+          '--now',
+          _updateTimer,
+        ], allowFail: true);
       }),
-      ServiceStep('remove ${l.unitPath}', () async {
-        final f = File(l.unitPath);
-        if (f.existsSync()) await f.delete();
+      ServiceStep('remove ${l.unitPath} and the update units', () async {
+        for (final p in [l.unitPath, l.updateServicePath, l.updateTimerPath]) {
+          final f = File(p);
+          if (f.existsSync()) await f.delete();
+        }
       }),
       ServiceStep(
         'systemctl daemon-reload',
@@ -263,11 +326,46 @@ class SystemdBackend implements AutostartBackend {
           'restart xprs-server)',
       'Logs:   ${scope == ServiceScope.user ? 'journalctl --user' : 'journalctl'}'
           ' -u xprs-server -f',
+      'Updates: newer releases install themselves every six hours '
+          '(auto_update in the config; xprs-server update --dry-run to look)',
       if (scope == ServiceScope.user)
         'To start at boot without logging in: loginctl enable-linger '
             '\$USER',
     ];
   }
+
+  @override
+  Future<ServiceScope?> installedScope(String exePath) async {
+    final sys = SystemdLayout.system();
+    if (exePath == '${sys.installDir}/xprs-server' &&
+        File(sys.unitPath).existsSync()) {
+      return ServiceScope.system;
+    }
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) return null;
+    final user = SystemdLayout.user(
+      home,
+      xdgConfig: Platform.environment['XDG_CONFIG_HOME'],
+    );
+    final f = File(user.unitPath);
+    if (f.existsSync() && f.readAsStringSync().contains(exePath)) {
+      return ServiceScope.user;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> restart(ServiceScope scope) =>
+      _systemctl(scope, ['restart', _unitName]);
+
+  @override
+  Future<bool> isActive(ServiceScope scope) async {
+    final r = await Process.run('systemctl', _ctl(scope, ['is-active', _unitName]));
+    return r.exitCode == 0 && (r.stdout as String).trim() == 'active';
+  }
+
+  /// True for `dart` / `dartaotruntime`: the program was not compiled.
+  static bool isDartVm(String exe) => _isDartVm(exe);
 
   static bool _isRoot() {
     final r = Process.runSync('id', ['-u']);

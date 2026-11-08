@@ -56,6 +56,16 @@ abstract class AutostartBackend {
   /// Lines to print after install / uninstall (linger, leftover data...).
   List<String> notes(ServiceScope scope, {required bool installing});
 
+  /// The scope whose service runs the binary at [exePath]; null when no
+  /// service of this backend does (the updater then only replaces the file).
+  Future<ServiceScope?> installedScope(String exePath);
+
+  /// Restarts the server service (after the updater replaced the binary).
+  Future<void> restart(ServiceScope scope);
+
+  /// Whether the server service is running right now.
+  Future<bool> isActive(ServiceScope scope);
+
   /// The backend for this machine; [UnsupportedBackend] when there is none.
   static AutostartBackend forPlatform() {
     if (Platform.isLinux) {
@@ -109,6 +119,12 @@ class UnsupportedBackend implements AutostartBackend {
   Future<int> status(ServiceScope scope) async => _no();
   @override
   List<String> notes(ServiceScope scope, {required bool installing}) => [];
+  @override
+  Future<ServiceScope?> installedScope(String exePath) async => null;
+  @override
+  Future<void> restart(ServiceScope scope) async => _no();
+  @override
+  Future<bool> isActive(ServiceScope scope) async => _no();
 }
 
 /// Prints each step and, unless [dryRun], runs it.
