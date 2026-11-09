@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XPRS server</title>
+<meta name="description" content="Run an XPRS station on a Linux machine at home, reach it from the internet through your router, and give it a permanent name under xprs.dev.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #f4f1ea; --ink: #2a2620; --dim: #6b645a; --line: #d8d2c4;
+  --accent: #23557a; --code-bg: #ebe6da; --note: #e6eef2; --warn: #f3e6d4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #232a2e; --ink: #e8e3d6; --dim: #9a938a; --line: #3a4248;
+    --accent: #7db4d8; --code-bg: #1b2124; --note: #1e2b33; --warn: #33291d;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 17px/1.6 Georgia, 'Times New Roman', serif;
+  padding: 0 1rem;
+}
+main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 0 5rem; }
+.back { font-size: 0.95rem; margin-bottom: 1.5rem; display: block; }
+h1 {
+  font-family: 'Courier New', monospace; font-size: 2.1rem;
+  letter-spacing: 0.04em; line-height: 1.15;
+}
+.tagline { color: var(--dim); font-size: 1.05rem; margin: 0.5rem 0 1.8rem; }
+h2 {
+  font-family: 'Courier New', monospace; font-size: 1.15rem;
+  margin: 2.4rem 0 0.8rem; padding-top: 1.2rem;
+  border-top: 1px solid var(--line); scroll-margin-top: 0.8rem;
+}
+h3 { font-size: 1.02rem; margin: 1.6rem 0 0.5rem; scroll-margin-top: 0.8rem; }
+h2 a, h3 a { color: inherit; text-decoration: none; }
+h2 a::after { content: ' #'; color: var(--dim); opacity: 0.35; font-weight: normal; }
+h2 a:hover { color: var(--accent); }
+p { margin-bottom: 0.9rem; }
+a { color: var(--accent); }
+pre {
+  background: var(--code-bg); border: 1px solid var(--line);
+  padding: 0.8rem 1rem; overflow-x: auto;
+  font: 13px/1.5 'Courier New', monospace;
+  margin: 0.6rem 0 1rem; border-radius: 3px;
+}
+code { font-family: 'Courier New', monospace; font-size: 0.92em; overflow-wrap: anywhere; }
+ul, ol { margin: 0 0 0.9rem 1.4rem; }
+li { margin-bottom: 0.45rem; }
+ol.steps > li { margin-bottom: 1rem; }
+.box {
+  border-left: 3px solid var(--accent); background: var(--note);
+  padding: 0.7rem 1rem; margin: 1rem 0; border-radius: 0 3px 3px 0;
+}
+.box.warn { border-left-color: #b4791f; background: var(--warn); }
+.box p:last-child { margin-bottom: 0; }
+.table { overflow-x: auto; margin: 0.6rem 0 1.1rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: normal; color: var(--dim); }
+.toc { columns: 2; column-gap: 2rem; font-size: 0.95rem; margin-left: 1.2rem; }
+@media (max-width: 34rem) { .toc { columns: 1; } }
+.diagram { margin: 1rem 0 1.2rem; color: var(--ink); }
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram figcaption { color: var(--dim); font-size: 0.9rem; margin-top: 0.4rem; }
+footer {
+  margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+  color: var(--dim); font-size: 0.9rem;
+}
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="/">&larr; xprs.dev</a>
+<h1>XPRS server</h1>
+<p class="tagline">A station for your home: one program on a Linux machine, reachable from anywhere, with a name of its own under xprs.dev.</p>
+
+<p>The XPRS server is a station that runs without a screen. It joins the XPRS
+network over the internet (Reticulum), bridges the devices on your own network,
+keeps a public archive for other stations, and serves the XPRS web chat so
+anybody with a browser can talk to the network, no app needed.</p>
+
+<p>This page takes you through three things, in order:</p>
+<ol>
+  <li><a href="#install">Install it</a> on a Linux machine. Ten minutes.</li>
+  <li><a href="#router">Open it to the internet</a> on your home router, so people outside your home can reach it.</li>
+  <li><a href="#name">Get its name</a>, <code>yourcallsign.xprs.dev</code>. This happens by itself once step 2 works.</li>
+</ol>
+
+<ul class="toc">
+  <li><a href="#need">What you need</a></li>
+  <li><a href="#install">Install</a></li>
+  <li><a href="#admin">Become its administrator</a></li>
+  <li><a href="#router">Reach it from the internet</a></li>
+  <li><a href="#connection">What connection do you have?</a></li>
+  <li><a href="#fixed">A fixed address at home</a></li>
+  <li><a href="#forward">Open ports 80 and 443</a></li>
+  <li><a href="#fritzbox">FRITZ!Box, step by step</a></li>
+  <li><a href="#others">Other routers</a></li>
+  <li><a href="#check">Check it from outside</a></li>
+  <li><a href="#name">Your name at xprs.dev</a></li>
+  <li><a href="#trouble">When something does not work</a></li>
+  <li><a href="#cgnat">No public IPv4 address</a></li>
+  <li><a href="#updates">Updates</a></li>
+  <li><a href="#backup">Backup and moving</a></li>
+</ul>
+
+<h2 id="need"><a href="#need">What you need</a></h2>
+<ul>
+  <li><strong>A Linux machine that stays on</strong>, with systemd (Debian,
+  Ubuntu, Raspberry Pi OS and most others). A Raspberry Pi 4 or 5 with the
+  64-bit Raspberry Pi OS is plenty: the server uses less than 200 MB of memory.</li>
+  <li><strong>The ready-made program is for 64-bit ARM</strong> (a Raspberry Pi
+  with a 64-bit system). On a PC (x86-64) build it from source, see the
+  <a href="https://github.com/xprs-dev/server#build-from-source">README</a>.</li>
+  <li><strong>Version 0.4.0 or later</strong> for the name under xprs.dev and
+  for automatic updates.</li>
+  <li><strong>A cable or WiFi connection</strong> to your home router, and the
+  router's password, for <a href="#router">part 2</a>.</li>
+</ul>
+
+<h2 id="install"><a href="#install">Install</a></h2>
+<ol class="steps">
+  <li><p><strong>Download the program</strong> from the
+  <a href="https://github.com/xprs-dev/server/releases/latest">latest release</a>
+  and check it arrived whole:</p>
+<pre>wget https://github.com/xprs-dev/server/releases/latest/download/xprs-server-linux-arm64
+wget https://github.com/xprs-dev/server/releases/latest/download/xprs-server-linux-arm64.sha256
+sha256sum -c xprs-server-linux-arm64.sha256
+chmod +x xprs-server-linux-arm64</pre></li>
+  <li><p><strong>Install the one library it needs</strong> (Debian, Ubuntu, Raspberry Pi OS):</p>
+<pre>sudo apt install libsqlite3-0</pre></li>
+  <li><p><strong>Install it as a service</strong> that starts with the machine:</p>
+<pre>sudo ./xprs-server-linux-arm64 install-service</pre>
+  <p>This copies the program to <code>/opt/xprs-server</code>, creates a
+  system user <code>xprs</code> for it, writes a commented configuration file
+  to <code>/etc/xprs-server/config.yaml</code>, keeps its data in
+  <code>/var/lib/xprs-server</code>, and starts it on port 80. Nothing else is
+  needed: the web page is inside the program.</p></li>
+  <li><p><strong>See that it runs:</strong></p>
+<pre>systemctl status xprs-server
+journalctl -u xprs-server -f      # the log, live; Ctrl+C to leave</pre>
+  <p>The log says <code>server: 0.4.0, X3ABCD web chat ready</code>.
+  <code>X3ABCD</code> is your station's callsign: it was made from the
+  station's own key the first time it started, and it is how every other
+  station knows it.</p></li>
+  <li><p><strong>Open the web chat</strong> from a phone or computer on the same
+  network: <code>http://</code> followed by the machine's address, for example
+  <code>http://192.168.1.50/</code>. <code>hostname -I</code> on the machine
+  prints its address.</p></li>
+</ol>
+
+<h2 id="admin"><a href="#admin">Become its administrator</a></h2>
+<p>The first person who opens <strong>Administration</strong> from the menu
+(&#9776;), on the station's own network, can claim it. From then on only that
+person changes its settings: who may post, how far messages travel, the look of
+the page, and whether it updates itself. Claim it before you open the station
+to the internet; a claim from the internet is refused anyway.</p>
+
+<h2 id="router"><a href="#router">Reach it from the internet</a></h2>
+<p>At home, every device shares one internet address: the router's. When
+somebody outside types that address, the router receives the request and does
+not know which of your devices it is for, so it throws it away. That is NAT,
+and it is why your station works at home but nobody outside can open it.</p>
+<p>The fix is a rule on the router: <em>requests for ports 80 and 443 go to
+the station</em>. It is called <strong>port forwarding</strong> (also
+<em>port sharing</em>, <em>virtual server</em> or <em>NAT rule</em>, depending on
+the router). For IPv6 there is no NAT, but the router's firewall still blocks
+incoming requests, and the same kind of rule lets them through.</p>
+
+<figure class="diagram">
+<svg viewBox="0 0 640 170" role="img" aria-label="A visitor on the internet reaches the router's public address; the router forwards ports 80 and 443 to the station at home">
+  <g fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="10" y="55" width="110" height="60" rx="8"/>
+    <rect x="245" y="45" width="150" height="80" rx="8"/>
+    <rect x="520" y="55" width="110" height="60" rx="8"/>
+    <path d="M120 85 H240" marker-end="url(#ar)"/>
+    <path d="M395 85 H515" marker-end="url(#ar)"/>
+    <path d="M222 20 V150" stroke-dasharray="5 5" opacity="0.5"/>
+  </g>
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="currentColor"/></marker></defs>
+  <g fill="currentColor" font-family="Georgia, serif" font-size="14" text-anchor="middle">
+    <text x="65" y="82">visitor</text><text x="65" y="100" font-size="12" opacity="0.7">anywhere</text>
+    <text x="320" y="75">your router</text>
+    <text x="320" y="95" font-size="12" opacity="0.7">ports 80, 443</text>
+    <text x="320" y="112" font-size="12" opacity="0.7">&#8594; the station</text>
+    <text x="575" y="82">station</text><text x="575" y="100" font-size="12" opacity="0.7">192.168.1.50</text>
+    <text x="180" y="70" font-size="12" opacity="0.7">internet</text>
+    <text x="268" y="160" font-size="12" opacity="0.7">your home</text>
+  </g>
+</svg>
+<figcaption>Port forwarding: the router hands requests for ports 80 and 443 to the station.</figcaption>
+</figure>
+
+<p>Why these two ports: <strong>443</strong> is HTTPS, what browsers use.
+<strong>80</strong> is plain HTTP, which the certificate authority (Let's
+Encrypt) uses to check that the name really leads to your station before it
+issues a certificate. Both are needed. Nothing else on the machine becomes
+reachable: only these two ports, only to the station.</p>
+
+<h3 id="connection"><a href="#connection">Step 1. What kind of connection do you have?</a></h3>
+<p>Before changing anything, find out whether your router has a public IPv4
+address of its own. Many cable and fibre providers share one IPv4 address among
+many customers (called <em>CGNAT</em> or <em>DS-Lite</em>), and then no rule on
+your router can bring IPv4 visitors in.</p>
+<ol>
+  <li>Look up the <strong>internet address</strong> on the router's overview
+  page (FRITZ!Box: <em>Overview</em>, the line <em>Internet</em>; other
+  routers: <em>Status</em>, <em>WAN</em>).</li>
+  <li>On the station, ask what the internet sees:
+<pre>curl -4 https://api.ipify.org; echo</pre></li>
+</ol>
+<div class="table"><table>
+  <tr><th>What you see</th><th>What it means</th></tr>
+  <tr><td>Both addresses are the same</td><td>A public IPv4 address. Port forwarding works. Go on.</td></tr>
+  <tr><td>The router shows <code>100.64.x.x</code> to <code>100.127.x.x</code>, or <code>10.x.x.x</code>, and the station shows something else</td><td>CGNAT: IPv4 forwarding cannot work. Read <a href="#cgnat">No public IPv4 address</a>.</td></tr>
+  <tr><td>The router shows no IPv4 address, or says <em>DS-Lite</em></td><td>DS-Lite: only IPv6 comes in. Read <a href="#cgnat">No public IPv4 address</a>.</td></tr>
+</table></div>
+<p>The station's log says the same thing in its own words. A few minutes after
+it starts:</p>
+<pre>public name: public addresses 178.202.105.29, 2a02:908:2616:da20:2ecf:67ff:fe14:d505</pre>
+
+<h3 id="fixed"><a href="#fixed">Step 2. Give the station a fixed address at home</a></h3>
+<p>The router hands out home addresses (<code>192.168.x.x</code>) as devices
+come and go. A forwarding rule points at one address, so the station must keep
+it. In the router's list of devices (<em>Home Network</em>, <em>LAN</em>,
+<em>DHCP</em>), find the station and tick <strong>always assign the same
+IPv4 address</strong> (also called <em>DHCP reservation</em> or <em>static
+lease</em>). The station's IPv6 address already stays the same on its own.</p>
+
+<h3 id="forward"><a href="#forward">Step 3. Open ports 80 and 443</a></h3>
+<p>Make two rules, one per port. Every router asks for the same few things:</p>
+<div class="table"><table>
+  <tr><th>Field</th><th>Rule 1</th><th>Rule 2</th></tr>
+  <tr><td>Device / internal IP</td><td colspan="2">the station (the address from step 2)</td></tr>
+  <tr><td>Protocol</td><td colspan="2">TCP</td></tr>
+  <tr><td>External port (from the internet)</td><td>80</td><td>443</td></tr>
+  <tr><td>Internal port (on the station)</td><td>80</td><td>443</td></tr>
+  <tr><td>IPv4</td><td colspan="2">on</td></tr>
+  <tr><td>IPv6 (open the firewall for this device)</td><td colspan="2">on, if the router offers it</td></tr>
+</table></div>
+<div class="box"><p><strong>Optional, port 4242.</strong> Forwarding TCP 4242
+the same way lets other XPRS stations connect to yours directly over Reticulum
+and makes it a hub for them. It is not needed for the web chat or for the
+name.</p></div>
+<div class="box"><p><strong>Or let the station ask.</strong> The station
+asks the router by itself (UPnP) to open ports 80 and 443. Most routers refuse
+unless you allow it for that one device; on a FRITZ!Box it is the tick
+<em>Permit independent port sharing for this device</em>. A rule you make by
+hand works just as well, and many people prefer it.</p></div>
+
+<h3 id="fritzbox"><a href="#fritzbox">FRITZ!Box, step by step</a></h3>
+<p>Menu names from FRITZ!OS 7.5 and later; older versions word some of them
+differently.</p>
+<ol class="steps">
+  <li>Open <code>http://fritz.box</code> and log in.</li>
+  <li><em>Home Network</em> &rarr; <em>Network</em> &rarr; the pencil next to
+  the station &rarr; tick <em>Always assign this network device the same IPv4
+  address</em> &rarr; <em>Apply</em>.</li>
+  <li><em>Internet</em> &rarr; <em>Permit Access</em> &rarr; <em>Port
+  Sharing</em> &rarr; <em>Add Device for Sharing</em> &rarr; choose the
+  station under <em>Device</em>.</li>
+  <li><em>New Sharing</em> &rarr; <em>Port sharing</em> &rarr; application
+  <em>HTTP server</em> (port 80). Tick <em>Enable sharing for IPv4</em> and
+  <em>Enable sharing for IPv6</em> &rarr; <em>OK</em>.</li>
+  <li><em>New Sharing</em> again &rarr; <em>Port sharing</em> &rarr;
+  application <em>HTTPS server</em> (port 443), both ticks &rarr; <em>OK</em>.</li>
+  <li><em>Apply</em>. The device's line now lists both shares, for IPv4 and
+  IPv6.</li>
+</ol>
+<p>Instead of steps 4 and 5 you can tick <em>Permit independent port sharing
+for this device</em> and let the station open the ports itself.</p>
+
+<h3 id="others"><a href="#others">Other routers</a></h3>
+<p>The rule has a different name on almost every router. Where to look:</p>
+<div class="table"><table>
+  <tr><th>Router</th><th>IPv4 forwarding</th><th>IPv6 firewall</th></tr>
+  <tr><td>TP-Link</td><td><em>Advanced &rarr; NAT Forwarding &rarr; Virtual Servers</em></td><td><em>Advanced &rarr; Security &rarr; IPv6 Firewall</em> (where offered)</td></tr>
+  <tr><td>ASUS</td><td><em>WAN &rarr; Virtual Server / Port Forwarding</em></td><td><em>Firewall &rarr; IPv6 Firewall</em></td></tr>
+  <tr><td>Netgear</td><td><em>Advanced &rarr; Advanced Setup &rarr; Port Forwarding / Port Triggering</em></td><td><em>Advanced &rarr; Advanced Setup &rarr; IPv6</em>, filtering</td></tr>
+  <tr><td>OpenWrt</td><td><em>Network &rarr; Firewall &rarr; Port Forwards</em></td><td><em>Network &rarr; Firewall &rarr; Traffic Rules</em>, accept TCP 80, 443 from wan to the station</td></tr>
+  <tr><td>Provider's own box (Vodafone Station, Telekom Speedport, ...)</td><td>look for <em>Port forwarding</em> or <em>Port sharing</em></td><td>look for <em>IPv6 firewall</em> or <em>Port opening</em></td></tr>
+</table></div>
+<p>If you cannot find it, the router's manual name for it is almost always
+<em>port forwarding</em>.</p>
+
+<h3 id="firewall"><a href="#firewall">Step 4. The firewall on the station itself</a></h3>
+<p>Raspberry Pi OS, Debian and Ubuntu let everything in by default. If you
+turned on a firewall on the machine, allow the same ports there:</p>
+<pre>sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp</pre>
+
+<h3 id="check"><a href="#check">Step 5. Check it from outside</a></h3>
+<p>The station tests itself from the internet every few minutes after a
+change, and backs off when a test fails (from 15 minutes up to 6 hours), so a
+restart makes it look at once:</p>
+<pre>sudo systemctl restart xprs-server
+journalctl -u xprs-server -f | grep "public name"</pre>
+<p>Within a few minutes you want these lines:</p>
+<pre>public name: x3abcd.xprs.dev is reachable on port 80
+public name: x3abcd.xprs.dev is reachable on port 443
+public name: certificate for x3abcd.xprs.dev, ... until 2027-02-06
+public name: web chat at https://x3abcd.xprs.dev/</pre>
+<p>Then open the address on a phone <strong>with WiFi switched off</strong>,
+so the test really comes from outside: many routers cannot reach their own
+public address from inside your home.</p>
+<p>The web page shows the same thing: menu &rarr; <strong>Station</strong>
+lists <em>Reachable at</em> with the links that work, and <em>Not reachable
+yet</em> with those still waiting for the router.</p>
+
+<h2 id="name"><a href="#name">Your name at xprs.dev</a></h2>
+<p>Your router's internet address can change, after a reconnect or whenever
+your provider decides. A name does not. Every XPRS station can have
+<code>&lt;callsign&gt;.xprs.dev</code>, for example
+<code>x3abcd.xprs.dev</code>, <strong>with nothing to register</strong>: no
+account, no form, no e-mail.</p>
+
+<h3>How it works</h3>
+<ol class="steps">
+  <li>The station's callsign is made from its own key, so the station can
+  prove the callsign is its own by signing with that key.</li>
+  <li>It asks the names keeper at <code>names.xprs.dev</code> for a challenge,
+  signs a claim naming its public address, and sends it <em>from</em> that
+  address. The keeper checks the signature, that the callsign belongs to the
+  key, and that the request really came from the address named, and only then
+  writes <code>x3abcd.xprs.dev</code> into DNS.</li>
+  <li>The station tests the name from outside, gets a certificate for it from
+  Let's Encrypt, and from then on publishes <code>https://x3abcd.xprs.dev/</code>
+  as its address: in the Station view, and to every other station.</li>
+  <li>When the address changes, the station notices within 15 minutes and
+  claims again. It also renews the claim every week.</li>
+</ol>
+<p>All of it is automatic in version 0.4.0 and later; there is nothing to
+turn on. It needs exactly what part 2 set up: the station reachable on ports 80
+and 443 from the internet.</p>
+
+<h3>The name stays yours</h3>
+<p>A callsign is short, so somebody could make another key that happens to
+give the same callsign. That is why <strong>a name belongs to the first key
+that claimed it, for at least six months after that key's last claim</strong>.
+A running station claims every week, so it keeps its name for as long as it
+runs. Only a station that has been silent for six months loses it. A claim from
+any other key meanwhile is refused with <em>held by another key</em>.</p>
+
+<h3>Choosing not to</h3>
+<p>Put <code>names_keeper: ""</code> in <code>/etc/xprs-server/config.yaml</code>
+and restart. The station then keeps only the <code>nip.io</code> names made
+from its address (<code>178-202-105-29.nip.io</code>), which also get a
+certificate and work, but change when the address does.</p>
+
+<h2 id="trouble"><a href="#trouble">When something does not work</a></h2>
+<p>Everything the station tries is in its log:</p>
+<pre>journalctl -u xprs-server --since "1 hour ago" | grep -E "public name|names"</pre>
+<div class="table"><table>
+  <tr><th>The log says</th><th>What to do</th></tr>
+  <tr><td><code>... is not reachable on port 80</code></td><td>The router does not forward port 80 to the station yet, or forwards it to the wrong address. Check <a href="#fixed">step 2</a> and <a href="#forward">step 3</a>, then restart the station.</td></tr>
+  <tr><td><code>port 443 is closed, so no HTTPS yet</code></td><td>Port 80 works, 443 does not. Add the second rule.</td></tr>
+  <tr><td><code>router refused IPv4 port 80: UPnP ...</code></td><td>Harmless when you made the rules by hand. Otherwise allow the device to open ports itself (<a href="#forward">step 3</a>).</td></tr>
+  <tr><td><code>the keeper sees A, not B; no claim</code></td><td>Your connection to the internet does not leave from the address the station found: a VPN or a proxy on the machine, or two internet lines. Switch the VPN off for the station.</td></tr>
+  <tr><td><code>held by another key until ...</code></td><td>Another station holds that callsign's name. Your station still works under its <code>nip.io</code> name. If it is your own old station whose key you lost, see <a href="#backup">Backup and moving</a>.</td></tr>
+  <tr><td><code>no public address found</code></td><td>The machine has no internet connection, or DNS does not work on it.</td></tr>
+  <tr><td>It works from home but not from the phone on mobile data</td><td>Test again a few minutes later; the station tests itself every 15 minutes. If the log says reachable and the phone still fails, the phone's network may have no IPv6 while only IPv6 is open: open IPv4 too.</td></tr>
+</table></div>
+<p>The station's own address and settings, from the machine:</p>
+<pre>xprs-server print-config --config /etc/xprs-server/config.yaml</pre>
+
+<h2 id="cgnat"><a href="#cgnat">No public IPv4 address (CGNAT, DS-Lite)</a></h2>
+<p>If <a href="#connection">step 1</a> showed that your provider shares
+your IPv4 address with others, IPv4 visitors can never reach you, whatever the
+router says. You still have choices:</p>
+<ul>
+  <li><strong>Use IPv6.</strong> Your station has a public IPv6 address of its
+  own. Make the IPv6 half of the rules in <a href="#forward">step 3</a>; the
+  station then gets its name with an IPv6 record. Every visitor whose own
+  connection has IPv6 reaches it: most mobile networks and many home
+  connections do, not all.</li>
+  <li><strong>Ask your provider for a public IPv4 address.</strong> Many give
+  one on request, often free (it may be called <em>dual stack</em> or
+  <em>public IPv4</em>).</li>
+  <li><strong>Leave it closed.</strong> The station still works fully as a
+  station: it connects out to the XPRS network over the internet, carries
+  messages, archives, and serves the web chat on your own network. Only
+  visitors from outside cannot open it.</li>
+</ul>
+
+<h2 id="updates"><a href="#updates">Updates</a></h2>
+<p>Every six hours the station looks for a newer stable release on GitHub. It
+installs one by itself after checking its digest, restarts, and goes back to
+the previous version if the new one does not start. You can switch this off in
+<strong>Administration &rarr; Updates</strong>, or with
+<code>auto_update: off</code> in the configuration file. By hand:</p>
+<pre>xprs-server --version
+sudo xprs-server update --dry-run     # what is on GitHub, change nothing
+sudo xprs-server update               # install it now</pre>
+
+<h2 id="backup"><a href="#backup">Backup and moving</a></h2>
+<p>The station's identity (its key, so its callsign and its name) and its
+archive live in <code>/var/lib/xprs-server</code>. Keep a copy of that
+folder somewhere safe:</p>
+<pre>sudo systemctl stop xprs-server
+sudo tar czf xprs-station-backup.tgz -C /var/lib xprs-server
+sudo systemctl start xprs-server</pre>
+<p>To move to another machine, install there as above, stop the service, put
+the folder back in <code>/var/lib/xprs-server</code> (owned by the user
+<code>xprs</code>) and start it. Same key, same callsign, same name: the new
+machine claims it at once from its own address.</p>
+<p>A lost key cannot be recovered: the station comes back with a new
+callsign and gets a new name. The old name returns to the pool six months after
+its last claim. If you need it sooner, ask the names keeper's operator on the
+<a href="https://github.com/xprs-dev/server/issues">issue tracker</a>.</p>
+
+<footer>
+<p>XPRS server, source and releases at
+<a href="https://github.com/xprs-dev/server">github.com/xprs-dev/server</a>.
+How names work in detail: <a href="/spec/#1303-a-name-for-a-dialable-station-the-names-keeper">XPRS.md section 13.0.3</a>.
+The HTTP interface: <a href="https://github.com/xprs-dev/spec/blob/main/API-HTTP.md">API-HTTP.md</a>.</p>
+</footer>
+</main>
+</body>
+</html>

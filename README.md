@@ -20,6 +20,10 @@ has the phases).
 
 ## Install
 
+The whole setup, with the home router and the name under xprs.dev, step by
+step: **https://xprs.dev/server**.
+
+
 Download `xprs-server` from the [releases](https://github.com/xprs-dev/server/releases),
 make it executable, and start it at boot:
 
