@@ -23,6 +23,8 @@ import 'package:xprs_core/src/services/log_service.dart';
 import 'package:xprs_core/src/services/names/desec_dns_io.dart';
 import 'package:xprs_core/src/services/names/names_client_io.dart';
 import 'package:xprs_core/src/services/names/names_keeper.dart';
+import 'package:xprs_core/src/services/names/xprs_port_probe_io.dart';
+import 'package:xprs_core/src/services/preferences_service.dart';
 import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
@@ -210,6 +212,11 @@ Future<void> _run(
         log: LogService.instance.add,
       );
       api.names = keeper;
+      // Every claimant is tested from outside on 13.4's port: a ping that
+      // must come back signed by the claimant (xprs_port_probe_io.dart).
+      keeper.probePort = (address, call, keyHex) => xprsPortAnswers(
+          address, NamesKeeper.rnsPort,
+          asker: station.callsign, call: call, keyHex: keyHex);
       final k = keeper;
       namesTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
         await _namesReleaseRequests(k, namesDirFor(home));
@@ -226,6 +233,8 @@ Future<void> _run(
       options: PublicNameOptions(
         dir: '$home/.local/share/xprs/tls',
         httpPort: config.httpPort,
+        // The Reticulum node (XPRS.md 13.4) is asked for with the web ports.
+        extraPorts: [config.rnsPort],
         httpsPort: config.httpsPort,
         address: address,
         upnp: config.upnp,
@@ -243,11 +252,50 @@ Future<void> _run(
     final pn = publicName;
     // The page's Station view: where the internet reaches this web chat and
     // which names still wait for the router.
-    api.addresses = () => WebAddresses(urls: pn.urls, pending: pn.pending);
+    // The Reticulum node is dialable when the keeper reached it from
+    // outside: then its name goes out as `dial:` (13.0.2) on the station's
+    // announcements, and comes off again when the port closes.
+    bool? rnsOpen;
+    DateTime? portAskedAt;
+    void setDial(List<String> names, bool? open) {
+      rnsOpen = open;
+      portAskedAt = DateTime.now();
+      final prefs = PreferencesService.instanceSync;
+      if (prefs == null || open == null) return;
+      final port = config.rnsPort == NamesKeeper.rnsPort ? '' : ':${config.rnsPort}';
+      final dial = open && names.isNotEmpty ? '${names.first}$port' : '';
+      if (prefs.xprsDial != dial) {
+        prefs.xprsDial = dial;
+        LogService.instance.add(dial.isEmpty
+            ? 'server: not reachable on tcp ${config.rnsPort} from outside; no dial: announced'
+            : 'server: Reticulum node reachable at $dial (announced as dial:)');
+      }
+    }
+
+    api.addresses = () {
+      final d = PreferencesService.instanceSync?.xprsDial ?? '';
+      return WebAddresses(
+        urls: pn.urls,
+        pending: pn.pending,
+        rnsPort: config.rnsPort,
+        rnsOpen: rnsOpen,
+        dial: d.isEmpty ? null : d,
+      );
+    };
+    // While the port is not reachable, ask again every half hour, so a
+    // router rule made today is noticed today, not at next week's claim.
+    pn.askNamesAgain = () =>
+        rnsOpen != true &&
+        portAskedAt != null &&
+        DateTime.now().difference(portAskedAt!) > const Duration(minutes: 30);
     // Its own name: from the keeper it is, or from the keeper it asks.
     if (keeper != null) {
       final k = keeper;
-      pn.extraNames = ({v4, v6}) => k.keepOwn(v4: v4, v6: v6);
+      pn.extraNames = ({v4, v6}) async {
+        final names = await k.keepOwn(v4: v4, v6: v6);
+        setDial(names, k.ownPortOpen);
+        return names;
+      };
     } else if (config.namesKeeper.isNotEmpty) {
       final client = NamesClient(
         NamesClientOptions(
@@ -261,7 +309,11 @@ Future<void> _run(
         ),
         log: LogService.instance.add,
       );
-      pn.extraNames = ({v4, v6}) => client.claim(v4: v4, v6: v6);
+      pn.extraNames = ({v4, v6}) async {
+        final names = await client.claim(v4: v4, v6: v6);
+        setDial(names, client.portOpen);
+        return names;
+      };
     }
     await publicName.start();
     station.alsoLocal = (peer) {

@@ -2518,6 +2518,22 @@ function loadStation(){
         if(ps.length)h2+='<p class="dim">A name works once the router lets TCP ports 80 and 443 in to this machine '+
           'for that address; the station tests it again by itself.</p>';
       }
+      /* The Reticulum node on the station's TCP port (XPRS.md 13.4): whether
+       * the internet reaches it, and what a Reticulum client points at. */
+      if(sv.rns&&sv.rns.port){
+        var rn=sv.rns,dl=rn.dial?String(rn.dial):'',hp=dl.split(':'),host=hp[0],
+            prt=hp.length>1?hp[1]:String(rn.port);
+        h2+='<h3>Reticulum node</h3><table class="kv">'+
+          row('Port','TCP '+esc(rn.port))+
+          row('From the internet',rn.reachable===true?'reachable':
+              rn.reachable===false?'<span class="dim">not reachable</span>':
+              '<span class="dim">not tested yet</span>')+
+          (dl?row('Connect to',esc(host)+' port '+esc(prt)):'')+'</table>';
+        if(dl)h2+='<p class="dim">In a Reticulum configuration: a TCPClientInterface with target_host = '+
+          esc(host)+' and target_port = '+esc(prt)+'.</p>';
+        else if(rn.reachable===false)h2+='<p class="dim">Forward TCP port '+esc(rn.port)+
+          ' on the router to this machine, as for ports 80 and 443; the station tests it again within half an hour.</p>';
+      }
       var hasF=false;for(k in f){hasF=true;break;}
       if(hasF){
         h2+='<h3>Roles</h3><table class="kv">';

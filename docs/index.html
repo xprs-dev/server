@@ -78,10 +78,11 @@ footer {
 <h1>XPRS server</h1>
 <p class="tagline">A station for your home: one program on a Linux machine, reachable from anywhere, with a name of its own under xprs.dev.</p>
 
-<p>The XPRS server is a station that runs without a screen. It joins the XPRS
-network over the internet (Reticulum), bridges the devices on your own network,
-keeps a public archive for other stations, and serves the XPRS web chat so
-anybody with a browser can talk to the network, no app needed.</p>
+<p>The XPRS server is a station that runs without a screen. It is a
+<strong>Reticulum node</strong> other stations and apps connect to, bridges
+the devices on your own network, keeps a public archive for other stations,
+and serves the XPRS web chat so anybody with a browser can talk to the
+network, no app needed.</p>
 
 <p>This page takes you through three things, in order:</p>
 <ol>
@@ -101,6 +102,7 @@ anybody with a browser can talk to the network, no app needed.</p>
   <li><a href="#fritzbox">FRITZ!Box, step by step</a></li>
   <li><a href="#others">Other routers</a></li>
   <li><a href="#check">Check it from outside</a></li>
+  <li><a href="#rns">A Reticulum node</a></li>
   <li><a href="#name">Your name at xprs.dev</a></li>
   <li><a href="#trouble">When something does not work</a></li>
   <li><a href="#cgnat">No public IPv4 address</a></li>
@@ -165,8 +167,8 @@ to the internet; a claim from the internet is refused anyway.</p>
 somebody outside types that address, the router receives the request and does
 not know which of your devices it is for, so it throws it away. That is NAT,
 and it is why your station works at home but nobody outside can open it.</p>
-<p>The fix is a rule on the router: <em>requests for ports 80 and 443 go to
-the station</em>. It is called <strong>port forwarding</strong> (also
+<p>The fix is a rule on the router: <em>requests for ports 80, 443 and 4242
+go to the station</em>. It is called <strong>port forwarding</strong> (also
 <em>port sharing</em>, <em>virtual server</em> or <em>NAT rule</em>, depending on
 the router). For IPv6 there is no NAT, but the router's firewall still blocks
 incoming requests, and the same kind of rule lets them through.</p>
@@ -185,21 +187,28 @@ incoming requests, and the same kind of rule lets them through.</p>
   <g fill="currentColor" font-family="Georgia, serif" font-size="14" text-anchor="middle">
     <text x="65" y="82">visitor</text><text x="65" y="100" font-size="12" opacity="0.7">anywhere</text>
     <text x="320" y="75">your router</text>
-    <text x="320" y="95" font-size="12" opacity="0.7">ports 80, 443</text>
+    <text x="320" y="95" font-size="12" opacity="0.7">ports 80, 443, 4242</text>
     <text x="320" y="112" font-size="12" opacity="0.7">&#8594; the station</text>
     <text x="575" y="82">station</text><text x="575" y="100" font-size="12" opacity="0.7">192.168.1.50</text>
     <text x="180" y="70" font-size="12" opacity="0.7">internet</text>
     <text x="268" y="160" font-size="12" opacity="0.7">your home</text>
   </g>
 </svg>
-<figcaption>Port forwarding: the router hands requests for ports 80 and 443 to the station.</figcaption>
+<figcaption>Port forwarding: the router hands requests for ports 80, 443 and 4242 to the station.</figcaption>
 </figure>
 
-<p>Why these two ports: <strong>443</strong> is HTTPS, what browsers use.
-<strong>80</strong> is plain HTTP, which the certificate authority (Let's
-Encrypt) uses to check that the name really leads to your station before it
-issues a certificate. Both are needed. Nothing else on the machine becomes
-reachable: only these two ports, only to the station.</p>
+<p>Why these three ports:</p>
+<ul>
+  <li><strong>443</strong> is HTTPS, what browsers use for the web chat.</li>
+  <li><strong>80</strong> is plain HTTP, which the certificate authority (Let's
+  Encrypt) uses to check that the name really leads to your station before it
+  issues a certificate.</li>
+  <li><strong>4242</strong> is the station's Reticulum node: other XPRS
+  stations, the XPRS app and any Reticulum program connect to the network
+  through it. The same port also speaks XPRS as plain text.</li>
+</ul>
+<p>Nothing else on the machine becomes reachable: only these three ports,
+only to the station.</p>
 
 <h3 id="connection"><a href="#connection">Step 1. What kind of connection do you have?</a></h3>
 <p>Before changing anything, find out whether your router has a public IPv4
@@ -232,22 +241,19 @@ IPv4 address</strong> (also called <em>DHCP reservation</em> or <em>static
 lease</em>). The station's IPv6 address already stays the same on its own.</p>
 
 <h3 id="forward"><a href="#forward">Step 3. Open ports 80 and 443</a></h3>
-<p>Make two rules, one per port. Every router asks for the same few things:</p>
+<p>Make three rules, one per port. Every router asks for the same few things:</p>
 <div class="table"><table>
-  <tr><th>Field</th><th>Rule 1</th><th>Rule 2</th></tr>
-  <tr><td>Device / internal IP</td><td colspan="2">the station (the address from step 2)</td></tr>
-  <tr><td>Protocol</td><td colspan="2">TCP</td></tr>
-  <tr><td>External port (from the internet)</td><td>80</td><td>443</td></tr>
-  <tr><td>Internal port (on the station)</td><td>80</td><td>443</td></tr>
-  <tr><td>IPv4</td><td colspan="2">on</td></tr>
-  <tr><td>IPv6 (open the firewall for this device)</td><td colspan="2">on, if the router offers it</td></tr>
+  <tr><th>Field</th><th>Rule 1</th><th>Rule 2</th><th>Rule 3</th></tr>
+  <tr><td>What it is</td><td>web, certificates</td><td>web chat (HTTPS)</td><td>Reticulum node</td></tr>
+  <tr><td>Device / internal IP</td><td colspan="3">the station (the address from step 2)</td></tr>
+  <tr><td>Protocol</td><td colspan="3">TCP</td></tr>
+  <tr><td>External port (from the internet)</td><td>80</td><td>443</td><td>4242</td></tr>
+  <tr><td>Internal port (on the station)</td><td>80</td><td>443</td><td>4242</td></tr>
+  <tr><td>IPv4</td><td colspan="3">on</td></tr>
+  <tr><td>IPv6 (open the firewall for this device)</td><td colspan="3">on, if the router offers it</td></tr>
 </table></div>
-<div class="box"><p><strong>Optional, port 4242.</strong> Forwarding TCP 4242
-the same way lets other XPRS stations connect to yours directly over Reticulum
-and makes it a hub for them. It is not needed for the web chat or for the
-name.</p></div>
 <div class="box"><p><strong>Or let the station ask.</strong> The station
-asks the router by itself (UPnP) to open ports 80 and 443. Most routers refuse
+asks the router by itself (UPnP) to open ports 80, 443 and 4242. Most routers refuse
 unless you allow it for that one device; on a FRITZ!Box it is the tick
 <em>Permit independent port sharing for this device</em>. A rule you make by
 hand works just as well, and many people prefer it.</p></div>
@@ -268,7 +274,11 @@ differently.</p>
   <em>Enable sharing for IPv6</em> &rarr; <em>OK</em>.</li>
   <li><em>New Sharing</em> again &rarr; <em>Port sharing</em> &rarr;
   application <em>HTTPS server</em> (port 443), both ticks &rarr; <em>OK</em>.</li>
-  <li><em>Apply</em>. The device's line now lists both shares, for IPv4 and
+  <li><em>New Sharing</em> once more &rarr; <em>Port sharing</em> &rarr;
+  application <em>Other application</em>, name <code>XPRS</code>, protocol
+  <em>TCP</em>, port to device <code>4242</code> through <code>4242</code>,
+  port requested externally <code>4242</code>, both ticks &rarr; <em>OK</em>.</li>
+  <li><em>Apply</em>. The device's line now lists three shares, for IPv4 and
   IPv6.</li>
 </ol>
 <p>Instead of steps 4 and 5 you can tick <em>Permit independent port sharing
@@ -291,7 +301,8 @@ for this device</em> and let the station open the ports itself.</p>
 <p>Raspberry Pi OS, Debian and Ubuntu let everything in by default. If you
 turned on a firewall on the machine, allow the same ports there:</p>
 <pre>sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp</pre>
+sudo ufw allow 443/tcp
+sudo ufw allow 4242/tcp</pre>
 
 <h3 id="check"><a href="#check">Step 5. Check it from outside</a></h3>
 <p>The station tests itself from the internet every few minutes after a
@@ -304,12 +315,42 @@ journalctl -u xprs-server -f | grep "public name"</pre>
 public name: x3abcd.xprs.dev is reachable on port 443
 public name: certificate for x3abcd.xprs.dev, ... until 2027-02-06
 public name: web chat at https://x3abcd.xprs.dev/</pre>
+<p>For port 4242 the names keeper calls your station back from the internet
+each time the station claims its name, half-hourly until it works:</p>
+<pre>names: the keeper reached this station on port 4242 at 178.202.105.29
+server: Reticulum node reachable at x3abcd.xprs.dev (announced as dial:)</pre>
 <p>Then open the address on a phone <strong>with WiFi switched off</strong>,
 so the test really comes from outside: many routers cannot reach their own
 public address from inside your home.</p>
 <p>The web page shows the same thing: menu &rarr; <strong>Station</strong>
-lists <em>Reachable at</em> with the links that work, and <em>Not reachable
-yet</em> with those still waiting for the router.</p>
+lists <em>Reachable at</em> with the links that work, <em>Not reachable
+yet</em> with those still waiting for the router, and under <em>Reticulum
+node</em> whether port 4242 is reachable from the internet.</p>
+
+<h2 id="rns"><a href="#rns">A Reticulum node</a></h2>
+<p>Every XPRS server is a <a href="https://reticulum.network/">Reticulum</a>
+transport node on TCP port 4242, for IPv4 and IPv6. It keeps connections to
+the public Reticulum hubs on its own, and once port 4242 is open on your router
+it is an entry point for others too: XPRS apps, other XPRS stations, and any
+Reticulum program (Sideband, NomadNet, <code>rnsd</code>).</p>
+<p>The station does not just assume it is reachable. When it claims its name,
+the names keeper connects back to it on port 4242 from the internet and sends
+a ping, which must come back signed by your station's key. Only then does the
+station announce its address to the network (<code>dial:</code>), so other
+stations and apps find your node by its callsign; if a later test fails, it
+stops announcing it.</p>
+<p>To connect a Reticulum program to your station, add an interface to its
+configuration (<code>~/.reticulum/config</code>):</p>
+<pre>[[XPRS station]]
+  type = TCPClientInterface
+  enabled = yes
+  target_host = x3abcd.xprs.dev
+  target_port = 4242</pre>
+<p>The port is fixed by the XPRS specification: it is the port Reticulum hubs
+already use, and the same port speaks XPRS as plain text (one packet per
+line), told apart by the first byte. Change it only if you know why
+(<code>rns_port</code> in the configuration); the router rule must then use the
+same number, and the name's automatic test still looks at 4242.</p>
 
 <h2 id="name"><a href="#name">Your name at xprs.dev</a></h2>
 <p>Your router's internet address can change, after a reconnect or whenever
@@ -361,6 +402,7 @@ certificate and work, but change when the address does.</p>
   <tr><td><code>router refused IPv4 port 80: UPnP ...</code></td><td>Harmless when you made the rules by hand. Otherwise allow the device to open ports itself (<a href="#forward">step 3</a>).</td></tr>
   <tr><td><code>the keeper sees A, not B; no claim</code></td><td>Your connection to the internet does not leave from the address the station found: a VPN or a proxy on the machine, or two internet lines. Switch the VPN off for the station.</td></tr>
   <tr><td><code>held by another key until ...</code></td><td>Another station holds that callsign's name. Your station still works under its <code>nip.io</code> name. If it is your own old station whose key you lost, see <a href="#backup">Backup and moving</a>.</td></tr>
+  <tr><td><code>not reachable on tcp 4242 from outside; no dial: announced</code>, or <em>Reticulum node: not reachable</em> on the Station view</td><td>The web works but port 4242 does not reach the station: add the third rule (<a href="#forward">step 3</a>). The station asks again within half an hour, or at once after <code>sudo systemctl restart xprs-server</code>.</td></tr>
   <tr><td><code>no public address found</code></td><td>The machine has no internet connection, or DNS does not work on it.</td></tr>
   <tr><td>It works from home but not from the phone on mobile data</td><td>Test again a few minutes later; the station tests itself every 15 minutes. If the log says reachable and the phone still fails, the phone's network may have no IPv6 while only IPv6 is open: open IPv4 too.</td></tr>
 </table></div>

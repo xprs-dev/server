@@ -80,6 +80,16 @@ operator frees a label whose key was lost with:
 sudo xprs-server names-release X3ABCD
 ```
 
+## A Reticulum node
+
+Every server is a Reticulum transport node on TCP 4242 (`rns_port`), IPv4 and
+IPv6 on one socket, and the same port speaks XPRS as text (XPRS.md 13.4). The
+server asks the router for 4242 with its web ports; the names keeper pings it
+from outside with each claim, and once the ping comes back the server
+announces itself as `dial:<callsign>.xprs.dev` so other stations and phones
+can connect to it. A stock Reticulum client uses it as a `TCPClientInterface`
+with `target_host = x3abcd.xprs.dev` and `target_port = 4242`.
+
 ## Build from source
 
 Checked out next to `core`, `reticulum-dart` and `webchat`:
