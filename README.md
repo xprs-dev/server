@@ -32,9 +32,9 @@ chmod +x xprs-server
 sudo ./xprs-server install-service        # system service, web chat on port 80
 ```
 
-That is the whole install: the program carries its web page inside itself, so
-there is nothing else to download. It needs `libsqlite3` at run time (Debian:
-`sudo apt install libsqlite3-0`).
+That is the whole install: the program carries its web page and its
+database engine (zx, pure Dart) inside itself, so there is nothing else to
+download and no library to install.
 
 **Update:** it happens by itself. The installer adds a timer that runs
 `xprs-server update` every six hours: when a newer release is on GitHub,
