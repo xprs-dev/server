@@ -17,7 +17,8 @@ Future<void> main(List<String> args) async {
   String t() => '${(sw.elapsedMilliseconds / 1000).toStringAsFixed(2)}s';
   final ws = await WebSocket.connect(url);
   final control = StreamController<Map<String, dynamic>>.broadcast();
-  final gw = RnsGatewayClient((f) => ws.add(f), log: (m) => stdout.writeln('  rns: $m'));
+  final gw = RnsGatewayClient((f) => ws.add(f), log: (m) => stdout.writeln('  rns: $m'))
+    ..debug = Platform.environment['RNS_DEBUG'] == '1';
   ws.listen((m) {
     if (m is List<int>) {
       gw.onFrame(Uint8List.fromList(m));
