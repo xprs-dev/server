@@ -25,6 +25,10 @@ import 'package:xprs_core/src/services/names/names_client_io.dart';
 import 'package:xprs_core/src/services/names/names_keeper.dart';
 import 'package:xprs_core/src/services/names/xprs_port_probe_io.dart';
 import 'package:xprs_core/src/services/preferences_service.dart';
+import 'package:xprs_core/src/platform/core_host.dart';
+import 'package:xprs_core/src/profile/profile_service.dart';
+import 'package:xprs_core/src/profile/storage_paths.dart';
+import 'package:xprs_core/src/services/xprs/xprs_packet.dart';
 import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
@@ -127,6 +131,7 @@ Future<void> _main(List<String> argv) async {
   }
   if (inv.command == 'update') return _update(inv, config);
   if (inv.command == 'names-release') return _namesRelease(inv, config);
+  if (inv.command == 'sign') return _sign(config);
   await _run(config, argv, configPath);
 }
 
@@ -519,5 +524,30 @@ Future<void> _service(Invocation inv) async {
     for (final n in backend.notes(scope, installing: installing)) {
       stdout.writeln(n);
     }
+  }
+}
+
+/// `xprs-server sign`: the operator signs as the station (its key is the
+/// station's own, in the data directory): one canonical wire a line on
+/// stdin, the signed wire on stdout, an empty line for one that does not
+/// parse. Run as the service's user with its HOME. What it signs then goes
+/// through the station's API like anything else; whoever holds this key is
+/// the station's operator (API-HTTP.md, /api/admin).
+Future<void> _sign(ServerConfig config) async {
+  final store = await FileKeyValueStore.open(
+      settingsPathFor(Platform.environment['HOME'] ?? '.'));
+  CoreHost.openPreferences = () async => store;
+  await initStorageRoot();
+  await PreferencesService.instance();
+  await ProfileService.instance.load();
+  final d = xprsProfileScalar();
+  if (d == null) {
+    stderr.writeln('no station identity in this data directory');
+    exitCode = 1;
+    return;
+  }
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final p = XprsPacket.parse(line.trim());
+    stdout.writeln(p == null ? '' : xprsSign(p, d).encode());
   }
 }

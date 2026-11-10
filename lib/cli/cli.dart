@@ -19,6 +19,7 @@ const commands = <String, String>{
   'service-status': 'show whether the boot service is running',
   'update': 'install a newer release from GitHub (--dry-run: only look)',
   'names-release': 'free a station name whose key was lost: names-release X3ABCD',
+  'sign': 'sign packets as the station: one canonical wire a line on stdin, the signed wire on stdout',
 };
 
 /// Commands that take one argument after their name.
