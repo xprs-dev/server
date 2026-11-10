@@ -21,6 +21,21 @@ The XPRS server edition. It is a HOST of the core, like the app: it wires
 5. **Compiles are capped at 2 GB** on the development laptop:
    `systemd-run --user --scope -p MemoryMax=2G dart compile exe ...`.
 
+## The web chat page is one page
+
+The page is developed only in `webchat` (`page/chat_page.html`, built by
+`tool/build.py`) and every station serves the identical build: the firmware
+(`common/xprs_hotspot/chat_page.c`, `build.py --c`), the server
+(`web/chat_page.html` and `lib/web/embedded_page.dart`, `tool/sync_web_chat.sh`)
+and the app (`assets/web_chat/chat_page.html`). Never edit a copy. After a
+webchat change, regenerate every copy in the same change and check they match.
+
+The only part that differs per implementation is the API engine behind the
+page (`/api/...`). Keep it generic and XPRS-compliant: what a station can or
+cannot do reaches the page as data (`/api/services`: `page.tabs`, features),
+never as a different page or a feature placed somewhere else on one kind of
+station. Feature logic belongs in the page's JavaScript.
+
 ## Options and boot
 
 An option is added in ONE place: `ServerConfig` (`lib/config/server_config.dart`:
