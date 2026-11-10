@@ -131,12 +131,103 @@ class WebChatServer implements AcmeWebServer {
     await res.close();
   }
 
+  /// A file by reference, streamed both ways (API-HTTP.md): an upload goes
+  /// into the store a part at a time, a download is read a part at a time and
+  /// answers `Range:`, so a film plays and seeks without the server ever
+  /// holding it whole.
+  Future<bool> _file(HttpRequest req, String peer) async {
+    final res = req.response;
+    final ref = req.uri.path.substring(WebChatApi.filePath.length);
+    if (req.method == 'POST') {
+      final up = api.beginFilePut(ref, req.uri.queryParameters, peer,
+          req.contentLength < 0 ? 0 : req.contentLength);
+      if (up.reply != null) {
+        await _json(res, up.reply!);
+        return true;
+      }
+      try {
+        await for (final c in req) {
+          up.add(c);
+        }
+      } catch (_) {
+        up.abort();
+        rethrow;
+      }
+      await _json(res, up.finish());
+      return true;
+    }
+    if (req.method != 'GET' && req.method != 'HEAD') return false;
+    final f = api.openFile(ref);
+    if (f.reply != null) {
+      await _json(res, f.reply!);
+      return true;
+    }
+    var start = 0, end = f.size - 1;
+    final range = req.headers.value(HttpHeaders.rangeHeader);
+    final m = range == null ? null : RegExp(r'^bytes=(\d*)-(\d*)$').firstMatch(range.trim());
+    if (m != null && f.size > 0) {
+      final a = m.group(1)!, b = m.group(2)!;
+      if (a.isEmpty && b.isNotEmpty) {
+        start = (f.size - int.parse(b)).clamp(0, f.size - 1);
+      } else if (a.isNotEmpty) {
+        start = int.parse(a);
+        if (b.isNotEmpty) end = int.parse(b).clamp(start, f.size - 1);
+      }
+      if (start >= f.size) {
+        res.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+        res.headers.set(HttpHeaders.contentRangeHeader, 'bytes */${f.size}');
+        await res.close();
+        return true;
+      }
+      res.statusCode = HttpStatus.partialContent;
+      res.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/${f.size}');
+    } else {
+      res.statusCode = HttpStatus.ok;
+    }
+    res.headers.set(HttpHeaders.contentTypeHeader, f.contentType);
+    res.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+    res.headers.set('Access-Control-Allow-Origin', '*');
+    f.headers.forEach(res.headers.set);
+    res.contentLength = f.size == 0 ? 0 : end - start + 1;
+    if (req.method != 'HEAD') {
+      const step = 256 << 10;
+      for (var at = start; at <= end; at += step) {
+        final n = (end - at + 1).clamp(0, step);
+        final part = f.read(at, n);
+        if (part == null) break;
+        res.add(part);
+        await res.flush();
+      }
+    }
+    await res.close();
+    return true;
+  }
+
+  Future<void> _json(HttpResponse res, WebChatReply reply) async {
+    final bytes = utf8.encode(jsonEncode(reply.json));
+    res
+      ..statusCode = reply.status
+      ..headers.contentType = ContentType.json
+      ..headers.set('Access-Control-Allow-Origin', '*')
+      ..contentLength = bytes.length
+      ..add(bytes);
+    await res.close();
+  }
+
   Future<void> _api(HttpRequest req) async {
     final res = req.response;
     var body = '';
     Uint8List? raw;
-    // A file by reference (API-HTTP.md) is bytes, up to the API's own cap.
+    // Behind a reverse proxy the socket's peer is the proxy; the per-visitor
+    // rate limit wants the visitor. Trusted only from loopback.
+    var peer = req.connectionInfo?.remoteAddress.address ?? '';
+    final fwd = req.headers.value('x-forwarded-for');
+    if (fwd != null && (peer == '127.0.0.1' || peer == '::1')) {
+      peer = fwd.split(',').first.trim();
+    }
+    // A file by reference (API-HTTP.md) is bytes, streamed.
     final isFile = req.uri.path.startsWith(WebChatApi.filePath);
+    if (isFile && api.fileStore != null && await _file(req, peer)) return;
     final cap = isFile ? api.fileMax : maxBody;
     if (req.method == 'POST') {
       if (req.contentLength > cap) {
@@ -158,13 +249,6 @@ class WebChatServer implements AcmeWebServer {
       } else {
         body = utf8.decode(chunks, allowMalformed: true);
       }
-    }
-    // Behind a reverse proxy the socket's peer is the proxy; the per-visitor
-    // rate limit wants the visitor. Trusted only from loopback.
-    var peer = req.connectionInfo?.remoteAddress.address ?? '';
-    final fwd = req.headers.value('x-forwarded-for');
-    if (fwd != null && (peer == '127.0.0.1' || peer == '::1')) {
-      peer = fwd.split(',').first.trim();
     }
     final reply = await api.handle(
         req.method, req.uri.path, req.uri.queryParameters, body,
