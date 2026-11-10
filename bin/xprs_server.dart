@@ -155,7 +155,7 @@ Future<void> _run(
   };
 
   final home = Platform.environment['HOME'] ?? '.';
-  // The one web chat page, from the webchat repo, compiled into the program
+  // The one web chat page, from the portal repo, compiled into the program
   // (tool/sync_web_chat.sh). There is no option to serve another: every
   // station serves the same page (test/web_page_test.dart).
   final Uint8List pageBytes = embeddedPage();

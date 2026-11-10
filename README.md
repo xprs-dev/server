@@ -12,7 +12,7 @@ What it does:
 | **Reticulum transport node** | accepts Reticulum clients (Sideband, NomadNet, XPRS apps, ESP32 stations) on TCP 4242, keeps uplinks to the public hubs and forwards for everything it can reach. The same port speaks XPRS as text (XPRS.md 24.4) |
 | **Bridge for local devices** | the XPRS LAN bearer (UDP 4242) and Reticulum LAN discovery, bridged onto the internet path through the core's one receive door |
 | **Public archiver** | keeps public history for others (XPRS.md 12.9.4) |
-| **Web chat** | serves the page from [webchat](https://github.com/xprs-dev/webchat) on HTTP (port 80 by default) with the core's `WebChatApi`: a browser that reaches the server chats with no install. The browser holds the key and signs; the server never sees it |
+| **Web chat** | serves the page from [portal](https://github.com/xprs-dev/portal) on HTTP (port 80 by default) with the core's `WebChatApi`: a browser that reaches the server chats with no install. The browser holds the key and signs; the server never sees it |
 
 It has its own identity, an `X3` (fixed station) callsign made on first run,
 never the operator's phone profile. No wapps, no BLE yet (`../xprs/docs/plan-server.md`
@@ -92,7 +92,7 @@ with `target_host = x3abcd.xprs.dev` and `target_port = 4242`.
 
 ## Build from source
 
-Checked out next to `core`, `reticulum-dart` and `webchat`:
+Checked out next to `core`, `reticulum-dart` and `portal`:
 
 ```sh
 dart pub get
@@ -100,7 +100,7 @@ dart compile exe bin/xprs_server.dart -o build/xprs-server
 ```
 
 The web chat page is built into the program from `lib/web/embedded_page.dart`
-(committed). After the page changes in `webchat`, run `tool/sync_web_chat.sh`
+(committed). After the page changes in `portal`, run `tool/sync_web_chat.sh`
 to rebuild `web/chat_page.html` and that file.
 
 ## Run

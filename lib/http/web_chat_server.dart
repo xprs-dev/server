@@ -1,5 +1,5 @@
 /*
- * The web chat over HTTP: the page from xprs-dev/webchat at `/`, and the
+ * The web chat over HTTP: the page from xprs-dev/portal at `/`, and the
  * core's WebChatApi at `/api/...`. The socket half only; every rule about what
  * a visitor may read or post lives in WebChatApi (core), which the app's share
  * server uses too.

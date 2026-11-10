@@ -1,6 +1,6 @@
-// The page the server gives visitors must be the webchat repo's page, byte
+// The page the server gives visitors must be the portal repo's page, byte
 // for byte: one page for every station (firmware, app, server), maintained
-// in ONE place. This fails when ../webchat changed and the server was not
+// in ONE place. This fails when ../portal changed and the server was not
 // re-synced (fix: tool/sync_web_chat.sh, then rebuild).
 import 'dart:io';
 
@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 import 'package:xprs_server/web/embedded_page.dart';
 
 void main() {
-  final build = File('../webchat/tool/build.py');
+  final build = File('../portal/tool/build.py');
   test('the embedded page is the webchat build, byte for byte', () async {
     final out = await Directory.systemTemp.createTemp('webchat');
     try {
@@ -24,5 +24,5 @@ void main() {
     } finally {
       await out.delete(recursive: true);
     }
-  }, skip: build.existsSync() ? false : 'webchat is not checked out next to this repo');
+  }, skip: build.existsSync() ? false : 'portal is not checked out next to this repo');
 }
