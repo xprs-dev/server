@@ -10,6 +10,7 @@
  * who came by the public name to HTTPS once there is a certificate
  * ([redirectHosts]).
  */
+import 'rns_gateway.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -24,6 +25,8 @@ class WebChatServer implements AcmeWebServer {
         _gz = Uint8List.fromList(gzip.encode(page));
 
   final WebChatApi api;
+  /// The Reticulum gateway at /rns, when this server is one.
+  RnsGateway? gateway;
   final Uint8List _html;
   final Uint8List _gz;
   HttpServer? _server;
@@ -97,6 +100,9 @@ class WebChatServer implements AcmeWebServer {
         res.headers.contentType = ContentType.text;
         if (ka != null) res.write(ka);
         await res.close();
+      } else if (path == '/rns' && gateway != null) {
+        // Reticulum for browsers (rns_gateway.dart), on HTTP and HTTPS alike.
+        await gateway!.serve(req);
       } else if (read && redirectHosts.contains(host)) {
         final port = httpsPort == 443 ? '' : ':$httpsPort';
         await res.redirect(Uri.parse('https://$host$port${req.uri}'),

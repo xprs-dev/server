@@ -31,6 +31,8 @@ import 'package:xprs_core/src/profile/storage_paths.dart';
 import 'package:xprs_core/src/services/xprs/xprs_packet.dart';
 import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
+import 'package:xprs_core/src/services/web_chat_rns.dart';
+import 'package:xprs_server/http/rns_gateway.dart';
 import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 import 'package:xprs_server/autostart/autostart.dart';
 import 'package:xprs_server/cli/cli.dart';
@@ -177,7 +179,11 @@ Future<void> _run(
   await station.start();
 
   final api = station.webChatApi();
-  final web = WebChatServer(api: api, page: pageBytes);
+  // The visitor API over Reticulum links, and the gateway browsers reach it by
+  // (portal/docs/plan-browser-reticulum.md).
+  serveWebChatOverRns(api);
+  final gateway = RnsGateway(api: api, station: () => station.callsign);
+  final web = WebChatServer(api: api, page: pageBytes)..gateway = gateway;
   var address = config.httpAddress;
   try {
     await web.start(port: config.httpPort, address: address);
@@ -247,7 +253,7 @@ Future<void> _run(
         email: config.acmeEmail,
       ),
       http: web,
-      newServer: () => WebChatServer(api: api, page: pageBytes),
+      newServer: () => WebChatServer(api: api, page: pageBytes)..gateway = gateway,
       log: LogService.instance.add,
       // The address goes in the station's signed decoration (XPRS.md 6.3.2
       // url:), so apps find the web chat by callsign. https:// whenever the

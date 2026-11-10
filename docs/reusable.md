@@ -25,3 +25,11 @@ the core; `../core/docs/reusable.md` lists it.
 | `tool/update_version.dart` + `lib/version.dart` | | the app's pattern: a generated constant from `pubspec.yaml`, with a test that fails when they differ |
 | `ZxNamesStore` | `lib/host/zx_names_store.dart` | the core's `NamesStore` over a zxdb key-value store (one `.zx` file, JSON rows, group commit): the shape for any small keyed table a host keeps for the core without SQLite |
 | `_namesRelease` / `_namesReleaseRequests` | `bin/xprs_server.dart` | an operator command that reaches a running service through a request file in the service's own directory, acted on by its tick: the pattern for any local-only administrative act on a sandboxed service |
+
+
+## The Reticulum gateway (`lib/http/rns_gateway.dart`)
+
+`/rns` on the web server: browsers connect by WebSocket and become quiet
+clients of the node (spec/API-HTTP.md, "A gateway"). Control frames `hello`
+and `resolve`; per-client limits. `tool/gateway_probe.dart` (Dart) and
+`tool/gateway_browser_check.py` (headless Chromium with rns.js) exercise it.
