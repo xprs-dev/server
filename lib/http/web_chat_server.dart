@@ -163,7 +163,7 @@ class WebChatServer implements AcmeWebServer {
       return true;
     }
     if (req.method != 'GET' && req.method != 'HEAD') return false;
-    final f = api.openFile(ref);
+    final f = api.openFile(ref, session: req.uri.queryParameters['session']);
     if (f.reply != null) {
       await _json(res, f.reply!);
       return true;
