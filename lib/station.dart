@@ -35,6 +35,7 @@ import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_mirror.dart';
 import 'package:xprs_core/src/services/xprs/xprs_digipeat.dart';
 import 'package:xprs_core/src/services/xprs/xprs_mesh_policy.dart';
+import 'package:xprs_core/src/services/xprs/xprs_monitor.dart';
 import 'package:xprs_core/src/services/xprs/xprs_history_server.dart';
 import 'package:xprs_core/src/services/xprs/xprs_ingest.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
@@ -266,6 +267,7 @@ class Station {
   }
 
   WebChatApi _webChatApi() => WebChatApi(
+        devices: () => XprsMonitor.instance.devicesForApi(),
     publicRows: archivePublicRows,
     held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
     // A visitor's wire is heard on `lan`, through the API: the bearer is the
