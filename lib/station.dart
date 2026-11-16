@@ -15,13 +15,11 @@
  *      server.
  */
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:hex/hex.dart';
 
-import 'package:reticulum/reticulum.dart' show NostrCrypto, Tier;
+import 'package:reticulum/reticulum.dart' show NostrCrypto;
 import 'package:xprs_core/src/platform/core_host.dart';
 import 'package:xprs_core/src/platform/heartbeat_keep_alive.dart';
 import 'package:xprs_core/src/profile/profile_service.dart';
@@ -29,22 +27,18 @@ import 'package:xprs_core/src/profile/storage_paths.dart';
 import 'package:xprs_core/src/services/log_service.dart';
 import 'package:xprs_core/src/services/mesh/mesh_service.dart';
 import 'package:xprs_core/src/services/preferences_service.dart';
-import 'package:xprs_core/src/services/receive/packet_gateway.dart';
 import 'package:xprs_core/src/services/reticulum/rns_service.dart';
+import 'package:xprs_core/src/services/station/station_host.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_mirror.dart';
 import 'package:xprs_core/src/services/xprs/xprs_digipeat.dart';
 import 'package:xprs_core/src/services/xprs/xprs_mesh_policy.dart';
-import 'package:xprs_core/src/services/xprs/xprs_monitor.dart';
 import 'package:xprs_core/src/services/xprs/xprs_history_server.dart';
 import 'package:xprs_core/src/services/xprs/xprs_ingest.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
 import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
-import 'package:xprs_core/src/services/xprs/xprs_packet.dart';
-import 'package:xprs_core/src/services/xprs/xprs_sig.dart';
 import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
-import 'package:xprs_core/src/services/xprs/xprs_publisher.dart';
 
 import 'host/file_key_value_store.dart';
 
@@ -266,110 +260,25 @@ class Station {
     return _api ??= _webChatApi();
   }
 
-  WebChatApi _webChatApi() => WebChatApi(
-        devices: () => XprsMonitor.instance.devicesForApi(),
-    publicRows: archivePublicRows,
-    held: (t) => XprsArchive.instance.countOf(types: t, undirected: true),
-    // A visitor's wire is heard on `lan`, through the API: the bearer is the
-    // network it came in on, and that it came through the page is the
-    // core's internal flag (XprsIngest.heard `viaApi`), never a wire word.
-    receive: (w) => PacketGateway.instance.receive(
-      Uint8List.fromList(utf8.encode(w)),
-      bearer: 'lan',
-      lane: RxLane.datagram,
-      viaApi: true,
-    ),
-    receiveFrom: (w, {required local}) => PacketGateway.instance.receive(
-      Uint8List.fromList(utf8.encode(w)),
-      bearer: 'lan',
-      lane: RxLane.datagram,
-      viaApi: true,
-      localLink: local,
-    ),
-    // A visitor who proved their key is at this station's ear (12.8.1), and
-    // the station may be their mailbox (12.7, 13.0.2).
-    onVisitor: (call, {required local}) =>
-        MeshService.instance.visitorHeard(call, local: local),
-    holdersOf: XprsArchive.instance.holdersFor,
-    offerMailbox: MeshService.instance.offerMailbox,
-    mailFor: MeshService.instance.mailFor,
-    mayAir: XprsPublisher.instance.mayAir,
-    selfCallsign: () => MeshService.instance.tableCallsign,
-    keyOf: keyFor,
-    appPath: () => null,
-    // Files by reference (API-HTTP.md): the mesh's own content store.
-    fileStore: () => MeshService.instance.media,
-    // The administrator and the visitor settings live with the station's.
-    store: _store,
-    // Administration, Updates: whether `xprs-server update` (the timer's
-    // job) installs newer releases. Read back in bin/xprs_server.dart.
-    hostSwitches: const {'auto_update': true},
-    isLocalPeer: isLocalPeer,
-    // XPRS.md 10.10: the station is the group of its own rooms. Its key signs
-    // the administrator's acts, and they go out like any of its packets.
-    groups: XprsGroups.instance,
-    signAsStation: (canonical) {
-      final p = XprsPacket.parse(canonical);
-      final d = xprsProfileScalar();
-      return p == null || d == null ? null : xprsSign(p, d);
-    },
-    publish: (w) => unawaited(XprsPublisher.instance.publishWire(w)),
-    // Rooms the station hosts (XPRS.md 10.10.1): their keys in the group
-    // store, their traffic filed here and never aired, read back by `d:`.
-    roomKeys: WebChatRoomKeys(
-      create: (nick) {
-        final g = XprsGroupKeys.instance.create(nick: nick);
-        if (g == null) return null;
-        // Teach the callsign->key map the room before anything is signed
-        // with it: a station does not hear itself (XprsGroupOps.create).
-        try {
-          RnsService.instance
-              .recordCallsignPubkey(g.callsign, NostrCrypto.decodeNpub(g.npub));
-        } catch (_) {}
-        return g.callsign;
-      },
-      scalar: XprsGroupKeys.instance.scalarFor,
-    ),
-    keep: (w) {
-      final p = XprsPacket.parse(w);
-      if (p == null) return;
-      XprsArchive.instance.admit(p, bearer: 'web', tier: Tier.self);
-      // Visible to the next poll, not in twenty seconds.
-      XprsArchive.instance.flush();
-    },
-    roomRows: ({required room, sinceMs, untilMs, required types, required limit}) =>
-        XprsArchive.instance.query(
-          sinceMs: sinceMs,
-          untilMs: untilMs,
-          types: types,
-          to: [room],
-          limit: limit,
-        ),
-  );
+  /// The wiring every deployment shares is the core's (stationWebChatApi);
+  /// the server adds where its settings live, its switches and its network.
+  WebChatApi _webChatApi() => stationWebChatApi(
+        appPath: () => null,
+        // The administrator and the visitor settings live with the station's.
+        store: _store,
+        // Administration, Updates: whether `xprs-server update` (the timer's
+        // job) installs newer releases. Read back in bin/xprs_server.dart.
+        hostSwitches: const {'auto_update': true},
+        isLocalPeer: isLocalPeer,
+      );
 
-  /// The key for a callsign: what the core heard, or this station's own. A
-  /// station never hears its own identity, so without the fallback it could
-  /// not verify the acts it signs itself (XPRS.md 10.10: appointing a
-  /// moderator), and XprsGroups dropped them as unverified.
   /// This station's own public key as an npub, or null before it has one.
   String? get ownNpub {
     final n = ProfileService.instance.activeProfile?.npub ?? '';
     return n.startsWith('npub1') ? n : null;
   }
 
-  Uint8List? keyFor(String call) {
-    final heard = XprsArchive.instance.keyResolver?.call(call);
-    if (heard != null) return heard;
-    final me = MeshService.instance.tableCallsign.trim().toUpperCase().split('-').first;
-    if (me.isEmpty || call.trim().toUpperCase().split('-').first != me) return null;
-    final npub = ProfileService.instance.activeProfile?.npub ?? '';
-    if (!npub.startsWith('npub1')) return null;
-    try {
-      return Uint8List.fromList(HEX.decode(NostrCrypto.decodeNpub(npub)));
-    } catch (_) {
-      return null;
-    }
-  }
+  Uint8List? keyFor(String call) => stationKeyFor(call);
 
   /// The station's own network: private addresses, plus the IPv6 /64s this
   /// machine has public addresses in (an IPv6 LAN hands out public ones).
