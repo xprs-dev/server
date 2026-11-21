@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:xprs_core/src/connections/internet/public_name/public_name.dart';
 import 'package:xprs_core/src/services/log_service.dart';
 import 'package:xprs_core/src/services/web_chat_api.dart';
+import 'package:xprs_core/src/services/xprs/xprs_bench_status.dart';
 
 class WebChatServer implements AcmeWebServer {
   WebChatServer({required this.api, required Uint8List page})
@@ -220,6 +221,17 @@ class WebChatServer implements AcmeWebServer {
     await res.close();
   }
 
+  /// The caller is on this machine. The server listens on `::`, so a local
+  /// IPv4 caller arrives as the mapped address.
+  static bool _isLoopback(HttpRequest req) {
+    final a = req.connectionInfo?.remoteAddress;
+    if (a == null) return false;
+    return a.isLoopback ||
+        a.address == '::ffff:127.0.0.1' ||
+        a.address == '127.0.0.1' ||
+        a.address == '::1';
+  }
+
   Future<void> _api(HttpRequest req) async {
     final res = req.response;
     var body = '';
@@ -230,6 +242,20 @@ class WebChatServer implements AcmeWebServer {
     final fwd = req.headers.value('x-forwarded-for');
     if (fwd != null && (peer == '127.0.0.1' || peer == '::1')) {
       peer = fwd.split(',').first.trim();
+    }
+    // The station's own readings of its archiver and file machinery
+    // (core xprs_bench_status.dart), for a test or the operator ON THIS
+    // MACHINE: a loopback socket that no proxy forwarded for. A visitor
+    // arriving through a reverse proxy is also a loopback socket, which is
+    // why the forwarded-for header refuses it.
+    if (req.method == 'GET' && fwd == null && _isLoopback(req)) {
+      final reading = xprsBenchStatus(req.uri.path);
+      if (reading != null) {
+        res.headers.contentType = ContentType.json;
+        res.write(jsonEncode({'ok': true, ...reading}));
+        await res.close();
+        return;
+      }
     }
     // A file by reference (API-HTTP.md) is bytes, streamed.
     final isFile = req.uri.path.startsWith(WebChatApi.filePath);
