@@ -282,6 +282,24 @@ class WebChatServer implements AcmeWebServer {
         body = utf8.decode(chunks, allowMalformed: true);
       }
     }
+    // Make this station fetch a file, for a test on this machine (the same
+    // gate as the readings above).
+    if (req.method == 'POST' &&
+        req.uri.path == kXprsFileFetchPath &&
+        fwd == null &&
+        _isLoopback(req)) {
+      Map<String, dynamic> asked;
+      try {
+        asked = jsonDecode(body) as Map<String, dynamic>;
+      } catch (_) {
+        asked = const {};
+      }
+      final done = await xprsBenchFetchFile(asked);
+      res.headers.contentType = ContentType.json;
+      res.write(jsonEncode(done));
+      await res.close();
+      return;
+    }
     final reply = await api.handle(
         req.method, req.uri.path, req.uri.queryParameters, body,
         peer: peer, raw: raw);
