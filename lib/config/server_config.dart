@@ -31,6 +31,7 @@ class ServerConfig {
     required this.publicName,
     required this.httpsPort,
     required this.upnp,
+    required this.lan,
     required this.acmeEmail,
     required this.acmeStaging,
     required this.autoUpdate,
@@ -68,6 +69,10 @@ class ServerConfig {
 
   /// Ask the router (UPnP) to let ports 80 and 443 in.
   final bool upnp;
+
+  /// Use the local network (XPRS on UDP 4242 and Reticulum's LAN discovery).
+  /// Off for a hosted machine whose local network is a data centre's.
+  final bool lan;
 
   /// Contact for the Let's Encrypt account. Null: none.
   final String? acmeEmail;
@@ -107,6 +112,7 @@ class ServerConfig {
     'public_name',
     'https_port',
     'upnp',
+    'lan',
     'acme_email',
     'acme_staging',
     'auto_update',
@@ -128,6 +134,7 @@ class ServerConfig {
     'public_name': true,
     'https_port': 443,
     'upnp': true,
+    'lan': true,
     'acme_email': null,
     'acme_staging': false,
     'auto_update': 'stable',
@@ -168,6 +175,7 @@ class ServerConfig {
       publicName: values['public_name'] as bool,
       httpsPort: values['https_port'] as int,
       upnp: values['upnp'] as bool,
+      lan: values['lan'] as bool,
       acmeEmail: values['acme_email'] as String?,
       acmeStaging: values['acme_staging'] as bool,
       autoUpdate: values['auto_update'] as String,
@@ -193,6 +201,7 @@ class ServerConfig {
       'public_name': publicName,
       'https_port': httpsPort,
       'upnp': upnp,
+      'lan': lan,
       'acme_email': acmeEmail ?? '(none)',
       'acme_staging': acmeStaging,
       'auto_update': autoUpdate,
@@ -232,6 +241,7 @@ Map<String, Object?> _validate(Map<String, Object?> m, String from) {
       case 'public_archiver':
       case 'public_name':
       case 'upnp':
+      case 'lan':
       case 'acme_staging':
         if (v is! bool) throw bad('true or false');
         out[k] = v;
@@ -369,6 +379,10 @@ http_port: $httpPort
 # https_port: 443
 # Ask the home router (UPnP) to let ports 80 and 443 in, where it allows it.
 # upnp: true
+# Use the local network: XPRS on UDP 4242 and Reticulum's LAN discovery, so
+# stations and phones on the same network find this one directly. Turn off on
+# a hosted machine, where the "local network" is a data centre's.
+# lan: true
 # A contact for the Let's Encrypt account (expiry notices). Optional.
 # acme_email: you@example.org
 # Use Let's Encrypt's staging CA: for testing, browsers do not trust it.

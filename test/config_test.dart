@@ -20,13 +20,14 @@ void main() {
       final c = ServerConfig.resolve(
         file: {'public_name': false, 'acme_email': 'op@example.org'},
         cli: parseInvocation(
-                ['--https-port', '8443', '--no-upnp', '--acme-staging'])
+                ['--https-port', '8443', '--no-upnp', '--no-lan', '--acme-staging'])
             .overrides,
       );
       expect(c.publicName, isFalse);
       expect(c.acmeEmail, 'op@example.org');
       expect(c.httpsPort, 8443);
       expect(c.upnp, isFalse);
+      expect(c.lan, isFalse);
       expect(c.acmeStaging, isTrue);
       expect(() => ServerConfig.resolve(file: {'acme_email': 'nope'}),
           throwsA(isA<ConfigException>()));

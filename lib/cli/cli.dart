@@ -78,6 +78,9 @@ ArgParser buildParser() => ArgParser()
       help: 'nip.io name + Let\'s Encrypt HTTPS when reachable (default on)')
   ..addOption('https-port', help: 'HTTPS port (default 443)')
   ..addFlag('upnp', help: 'ask the router to open ports 80/443 (default on)')
+  ..addFlag('lan',
+      help: 'use the local network: UDP 4242 and Reticulum LAN discovery '
+          '(default on)')
   ..addOption('acme-email', help: "Let's Encrypt contact (optional)")
   ..addFlag('acme-staging',
       negatable: false, help: "Let's Encrypt staging CA (testing)")
@@ -149,6 +152,7 @@ Invocation parseInvocation(List<String> argv) {
   for (final (flag, key) in [
     ('public-name', 'public_name'),
     ('upnp', 'upnp'),
+    ('lan', 'lan'),
     ('acme-staging', 'acme_staging'),
   ]) {
     if (r.wasParsed(flag)) o[key] = r[flag];

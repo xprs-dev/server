@@ -35,6 +35,7 @@ import 'package:xprs_core/src/services/xprs/xprs_digipeat.dart';
 import 'package:xprs_core/src/services/xprs/xprs_mesh_policy.dart';
 import 'package:xprs_core/src/services/xprs/xprs_history_server.dart';
 import 'package:xprs_core/src/services/xprs/xprs_ingest.dart';
+import 'package:xprs_core/src/services/xprs/xprs_lan.dart';
 import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
 import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
@@ -53,12 +54,16 @@ class StationConfig {
   /// Keep public history for others (XPRS.md 12.9.4).
   final bool publicArchiver;
 
+  /// Use the local network lanes (core XprsLan.enabled).
+  final bool lan;
+
   const StationConfig({
     required this.settingsPath,
     this.rnsPort = 4242,
     this.hubs,
     this.nickname = 'XPRS server',
     this.publicArchiver = true,
+    this.lan = true,
   });
 }
 
@@ -92,6 +97,7 @@ class Station {
     await prefs.setXprsAlwaysOn(config.publicArchiver);
 
     xprsBindWireCallsign();
+    XprsLan.enabled = config.lan;
     await MeshService.instance.start(canAdvertise: false);
     // Every verified act about a room this station runs (its own rooms and
     // the ones it hosts) goes to the group store, which a restart replays.

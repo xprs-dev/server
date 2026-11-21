@@ -174,6 +174,7 @@ Future<void> _run(
       hubs: config.hubs.isEmpty ? null : config.hubs,
       nickname: config.nickname,
       publicArchiver: config.publicArchiver,
+      lan: config.lan,
     ),
   );
   await station.start();
