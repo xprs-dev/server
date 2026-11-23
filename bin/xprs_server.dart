@@ -26,6 +26,7 @@ import 'package:xprs_core/src/services/names/names_keeper.dart';
 import 'package:xprs_core/src/services/names/xprs_port_probe_io.dart';
 import 'package:xprs_core/src/services/preferences_service.dart';
 import 'package:xprs_core/src/platform/core_host.dart';
+import 'package:xprs_core/src/platform/stall_watch.dart';
 import 'package:xprs_core/src/profile/profile_service.dart';
 import 'package:xprs_core/src/profile/storage_paths.dart';
 import 'package:xprs_core/src/services/xprs/xprs_packet.dart';
@@ -65,6 +66,9 @@ String settingsPathFor(String home) =>
 String namesDirFor(String home) => '$home/.local/share/xprs/names';
 
 Future<void> main(List<String> argv) async {
+  // Names whatever holds this isolate for a quarter of a second
+  // (performance.md 8.29); the line goes to the journal with the rest.
+  final watch = StallWatch(report: LogService.instance.add, label: 'server isolate');
   await runZonedGuarded(
     () async {
       // Mistakes by the person at the keyboard get a one-line message, not a
@@ -82,6 +86,7 @@ Future<void> main(List<String> argv) async {
         exit(1);
       }
     },
+    zoneSpecification: watch.spec,
     (e, st) {
       LogService.instance.add('server: uncaught $e');
       stderr.writeln(st);
