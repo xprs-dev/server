@@ -66,7 +66,7 @@ ArgParser buildParser() => ArgParser()
     'hub',
     help: 'uplink host[:port], repeatable (default: the core list)',
   )
-  ..addOption('nickname', help: 'station name (default "XPRS server")')
+  ..addOption('nickname', help: 'station name (default "Archiver")')
   ..addOption('data-dir', help: "the server's own HOME (identity, archive)")
   ..addFlag(
     'public-archiver',

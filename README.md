@@ -125,7 +125,7 @@ config file > built-in default**.
 | `http_address` | `--http-address` | 0.0.0.0 | `127.0.0.1` for this machine only |
 | `rns_port` | `--rns-port` | 4242 | Reticulum TCP port |
 | `hubs` | `--hub host[:port]` (repeat) | the core's list | uplinks |
-| `nickname` | `--nickname` | XPRS server | name given to a new identity |
+| `nickname` | `--nickname` | Archiver | name given to a new identity; a station still named "XPRS server" (the former default) is renamed |
 | `public_archiver` | `--[no-]public-archiver` | on | keep public history for others |
 | `data_dir` | `--data-dir` | HOME as it is | identity, archive, settings |
 | `log_file` | `--log-file` | stdout only | also append the log here |

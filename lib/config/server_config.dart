@@ -122,12 +122,20 @@ class ServerConfig {
     'names_keeper',
   ];
 
+  /// A new station's name: what it is to everybody else, an archiver
+  /// (XPRS.md 12), one of many kept close to the people who use them.
+  static const defaultNickname = 'Archiver';
+
+  /// The name servers were given before (2026-11-25), never chosen by an
+  /// operator: a station still called it takes [defaultNickname].
+  static const formerDefaultNickname = 'XPRS server';
+
   static const _defaults = <String, Object?>{
     'http_port': 80,
     'http_address': '::',
     'rns_port': 4242,
     'hubs': <String>[],
-    'nickname': 'XPRS server',
+    'nickname': defaultNickname,
     'data_dir': null,
     'public_archiver': true,
     'log_file': null,
@@ -397,7 +405,7 @@ http_port: $httpPort
 #   - rns.example.org:4242
 
 # The station's name, used when its identity is first made.
-# nickname: XPRS server
+# nickname: Archiver
 
 # Keep public history for other stations (an archiver).
 # public_archiver: true

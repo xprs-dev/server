@@ -41,6 +41,7 @@ import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
 import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
 import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
 
+import 'config/server_config.dart';
 import 'host/file_key_value_store.dart';
 
 class StationConfig {
@@ -61,7 +62,7 @@ class StationConfig {
     required this.settingsPath,
     this.rnsPort = 4242,
     this.hubs,
-    this.nickname = 'XPRS server',
+    this.nickname = ServerConfig.defaultNickname,
     this.publicArchiver = true,
     this.lan = true,
   });
@@ -194,7 +195,19 @@ class Station {
   }
 
   Future<void> _ensureIdentity() async {
-    if (ProfileService.instance.activeProfile != null) return;
+    final active = ProfileService.instance.activeProfile;
+    if (active != null) {
+      // Still called by the former default, which nobody chose: renamed to
+      // what it is, an archiver (aired with its next identity).
+      if (active.nickname == ServerConfig.formerDefaultNickname &&
+          config.nickname == ServerConfig.defaultNickname) {
+        await ProfileService.instance
+            .update(active.copyWith(nickname: config.nickname));
+        LogService.instance.add('server: renamed "${ServerConfig.formerDefaultNickname}" '
+            'to "${config.nickname}"');
+      }
+      return;
+    }
     final svc = ProfileService.instance;
     final seed = svc.generatePreview();
     final profile = svc.buildFromNsec(
