@@ -80,7 +80,9 @@ tries=0
 while (( have < size )); do
   tries=$(( tries + 1 ))
   (( tries > 500 )) && { log "giving up for now after $tries attempts"; exit 1; }
-  curl -fsS -A "$UA" ${MAPS_CURL_EXTRA:-} -C - --retry 10 --retry-all-errors --retry-delay 30 \
+  # No --retry here: on a retry curl truncates the file back to where this
+  # curl started (it lost 75 GB once). Each pass of this loop is a fresh `-C -`.
+  curl -fsS --http1.1 -A "$UA" ${MAPS_CURL_EXTRA:-} -C - \
        --speed-limit 20000 --speed-time 300 -o "$part" "$BASE/$key" && rc=0 || rc=$?
   # 33: the server would not resume (no ranges): that copy starts over.
   (( rc == 33 )) && { log "the server cannot resume this download: starting it over"; rm -f "$part"; }
