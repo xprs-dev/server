@@ -10,7 +10,8 @@
 # hold two, so the old planet goes when a new download starts (the cuts stay).
 #
 # Resume: the download is `<key>.part` with the build it is for in
-# `<key>.want`. Every run (monthly, at boot, after a failure) carries on from
+# `.<key>.want` (hidden: the folder is shared, and the server never
+# publishes a dotfile or a `.part`). Every run (monthly, at boot, after a failure) carries on from
 # the bytes already there (`curl -C -`), retrying until the size is reached.
 # A build Protomaps no longer serves is dropped for the newest one.
 #
@@ -41,9 +42,9 @@ print(sorted(json.loads(sys.stdin.read()),key=lambda b:b["key"])[-1]["key"])' <<
 
 # A download under way: go on with it while Protomaps still serves it.
 key=""
-for w in *.want; do
+for w in .*.want; do
   [[ -e "$w" ]] || break
-  k=${w%.want}
+  k=${w#.}; k=${k%.want}
   if [[ -n "$(field "$k" size)" ]]; then key=$k; else
     log "build $k is no longer served: dropping its partial download"
     rm -f "$k.part" "$w"
@@ -59,7 +60,7 @@ if [[ -z "$key" ]]; then
     fi
   fi
   key=$newest
-  echo "$key" > "$key.want"
+  echo "$key" > ".$key.want"
   # Room for the new planet: the old one goes first (the cuts stay).
   for p in planet-*.pmtiles; do [[ -e "$p" ]] && { log "removing old $p"; rm -f "$p"; }; done
 fi
@@ -99,7 +100,7 @@ if [[ -n "$md5" ]]; then
   fi
 fi
 mv "$part" "planet-$key"
-rm -f "$key.want"
+rm -f ".$key.want"
 ln -sfn "planet-$key" planet.pmtiles
 log "planet $key in place"
 
