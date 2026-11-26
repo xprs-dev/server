@@ -66,6 +66,10 @@ ArgParser buildParser() => ArgParser()
     'hub',
     help: 'uplink host[:port], repeatable (default: the core list)',
   )
+  ..addMultiOption(
+    'share-dir',
+    help: 'share this directory read-only as an XPRS folder, repeatable',
+  )
   ..addOption('nickname', help: 'station name (default "Archiver")')
   ..addOption('data-dir', help: "the server's own HOME (identity, archive)")
   ..addFlag(
@@ -142,6 +146,7 @@ Invocation parseInvocation(List<String> argv) {
   if (r.wasParsed('rns-port')) port('rns-port', 'rns_port');
   if (r.wasParsed('http-address')) o['http_address'] = r['http-address'];
   if (r.wasParsed('hub')) o['hubs'] = r['hub'];
+  if (r.wasParsed('share-dir')) o['share_dirs'] = r['share-dir'];
   if (r.wasParsed('nickname')) o['nickname'] = r['nickname'];
   if (r.wasParsed('data-dir')) o['data_dir'] = r['data-dir'];
   if (r.wasParsed('public-archiver')) {

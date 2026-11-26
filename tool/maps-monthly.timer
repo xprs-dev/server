@@ -1,0 +1,13 @@
+# Monthly, and shortly after every boot so a download a reboot cut off
+# carries on (the script does nothing when the planet is fresh).
+[Unit]
+Description=XPRS maps: monthly Protomaps planet
+
+[Timer]
+OnCalendar=monthly
+OnBootSec=15min
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

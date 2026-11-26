@@ -1,0 +1,20 @@
+# The Protomaps planet and its world cuts, kept in /srv/maps
+# (tool/maps_monthly.sh). Installed by hand: see the script's header.
+[Unit]
+Description=XPRS maps: monthly Protomaps planet and world cuts
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=brito
+Environment=MAPS_DIR=/srv/maps
+ExecStart=/srv/maps/bin/maps_monthly.sh
+# A broken connection or a failed check: try again, resuming the download.
+Restart=on-failure
+RestartSec=15min
+RestartPreventExitStatus=2
+TimeoutStartSec=infinity
+Nice=19
+IOSchedulingClass=idle
+MemoryMax=1500M

@@ -45,6 +45,17 @@ void main() {
       expect(c.sources['http_port'], 'default');
     });
 
+    test('share_dirs: absolute paths, a single one or a list, flag repeatable', () {
+      expect(ServerConfig.resolve().shareDirs, isEmpty);
+      expect(ServerConfig.resolve(file: {'share_dirs': '/srv/maps/'}).shareDirs, ['/srv/maps']);
+      expect(ServerConfig.resolve(file: {'share_dirs': ['/a', '/b']}).shareDirs, ['/a', '/b']);
+      expect(() => ServerConfig.resolve(file: {'share_dirs': ['maps']}),
+          throwsA(isA<ConfigException>()));
+      expect(parseInvocation(['run', '--share-dir', '/a', '--share-dir', '/b']).overrides,
+          {'share_dirs': ['/a', '/b']});
+      expect(defaultConfigYaml(), contains('# share_dirs:'));
+    });
+
     test('command line beats file beats default, sources recorded', () {
       final c = ServerConfig.resolve(
         file: {'http_port': 8080, 'nickname': 'From file'},

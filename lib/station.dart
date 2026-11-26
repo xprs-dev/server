@@ -40,6 +40,7 @@ import 'package:xprs_core/src/services/xprs/xprs_archive.dart';
 import 'package:xprs_core/src/services/xprs/xprs_group_keys.dart';
 import 'package:xprs_core/src/services/xprs/xprs_groups.dart';
 import 'package:xprs_core/src/services/xprs/xprs_identity_adopt.dart';
+import 'package:xprs_core/src/services/xprs/xprs_shared_folder.dart';
 
 import 'config/server_config.dart';
 import 'host/file_key_value_store.dart';
@@ -58,6 +59,9 @@ class StationConfig {
   /// Use the local network lanes (core XprsLan.enabled).
   final bool lan;
 
+  /// Directories shared read-only as XPRS folders (`share_dirs`).
+  final List<String> shareDirs;
+
   const StationConfig({
     required this.settingsPath,
     this.rnsPort = 4242,
@@ -65,6 +69,7 @@ class StationConfig {
     this.nickname = ServerConfig.defaultNickname,
     this.publicArchiver = true,
     this.lan = true,
+    this.shareDirs = const [],
   });
 }
 
@@ -72,6 +77,7 @@ class Station {
   Station(this.config);
   final StationConfig config;
   Timer? _hubTick;
+  Timer? _shareTick;
   Timer? _mirrorTick;
   FileKeyValueStore? _store;
   WebChatApi? _api;
@@ -192,6 +198,27 @@ class Station {
     // The same net the app keeps under its uplinks: re-dial hubs that dropped.
     _hubTick = Timer.periodic(const Duration(minutes: 5), (_) => _topUpHubs());
     RnsService.instance.onLinkDown = () => unawaited(_topUpHubs());
+    _shareFolders();
+  }
+
+  /// `share_dirs`: each directory held, served and published as a folder
+  /// (the core's XprsSharedFolder), looked at again every hour for files
+  /// added or replaced (the maps job runs monthly).
+  void _shareFolders() {
+    if (config.shareDirs.isEmpty) return;
+    final home = Platform.environment['HOME'] ?? '.';
+    final folders = [
+      for (final d in config.shareDirs)
+        XprsSharedFolder(d, indexDir: '$home/.local/share/xprs/shared-folders'),
+    ];
+    Future<void> all() async {
+      for (final f in folders) {
+        await f.refresh();
+      }
+    }
+
+    unawaited(all());
+    _shareTick = Timer.periodic(const Duration(hours: 1), (_) => unawaited(all()));
   }
 
   Future<void> _ensureIdentity() async {
@@ -337,6 +364,7 @@ class Station {
 
   Future<void> stop() async {
     _hubTick?.cancel();
+    _shareTick?.cancel();
     _mirrorTick?.cancel();
   }
 }

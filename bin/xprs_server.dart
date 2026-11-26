@@ -180,6 +180,7 @@ Future<void> _run(
       nickname: config.nickname,
       publicArchiver: config.publicArchiver,
       lan: config.lan,
+      shareDirs: config.shareDirs,
     ),
   );
   await station.start();

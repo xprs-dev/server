@@ -39,6 +39,7 @@ class ServerConfig {
     required this.namesZone,
     required this.namesToken,
     required this.namesKeeper,
+    required this.shareDirs,
     required this.sources,
   });
 
@@ -97,6 +98,11 @@ class ServerConfig {
   /// Empty: it asks none.
   final String namesKeeper;
 
+  /// Directories shared read-only as XPRS folders (XPRS.md 7.7.3): every
+  /// file in them is held, readable in ranges over HTTP and Reticulum, and
+  /// listed in a signed folder (`/srv/maps`). Empty: none.
+  final List<String> shareDirs;
+
   /// key -> 'default' | the config file's path | 'command line'.
   final Map<String, String> sources;
 
@@ -120,6 +126,7 @@ class ServerConfig {
     'names_zone',
     'names_token',
     'names_keeper',
+    'share_dirs',
   ];
 
   /// A new station's name: what it is to everybody else, an archiver
@@ -150,6 +157,7 @@ class ServerConfig {
     'names_zone': null,
     'names_token': null,
     'names_keeper': 'https://names.xprs.dev',
+    'share_dirs': <String>[],
   };
 
   /// Layers [file] then [cli] over the defaults. Both maps use the snake_case
@@ -191,6 +199,7 @@ class ServerConfig {
       namesZone: values['names_zone'] as String?,
       namesToken: values['names_token'] as String?,
       namesKeeper: values['names_keeper'] as String,
+      shareDirs: List<String>.unmodifiable(values['share_dirs'] as List<String>),
       sources: Map.unmodifiable(src),
     );
   }
@@ -218,6 +227,7 @@ class ServerConfig {
       // Never the token itself: print-config goes to terminals and logs.
       'names_token': namesToken == null ? '(none)' : '(set)',
       'names_keeper': namesKeeper.isEmpty ? '(none)' : namesKeeper,
+      'share_dirs': shareDirs.isEmpty ? '(none)' : shareDirs,
     };
     final w = keys.fold<int>(0, (m, k) => k.length > m ? k.length : m);
     return [
@@ -263,6 +273,16 @@ Map<String, Object?> _validate(Map<String, Object?> m, String from) {
           hubs.add(h.trim());
         }
         out[k] = hubs;
+      case 'share_dirs':
+        final list = v is List ? v : [v];
+        final dirs = <String>[];
+        for (final d in list) {
+          if (d is! String || !d.trim().startsWith('/')) {
+            throw bad('a list of absolute directory paths');
+          }
+          dirs.add(d.trim().replaceFirst(RegExp(r'/+$'), ''));
+        }
+        out[k] = dirs;
       case 'acme_email':
         if (v is! String || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())) {
           throw bad('an e-mail address');
@@ -428,6 +448,12 @@ http_port: $httpPort
 # the deSEC token that writes its records. The token is never printed.
 # names_zone: xprs.dev
 # names_token: ...
+
+# Directories shared read-only as XPRS folders: every file is held and
+# readable in ranges over HTTP and Reticulum, and the folder is published,
+# signed by the station. Hashed once; the hashes are kept in the data dir.
+# share_dirs:
+#   - /srv/maps
 
 # The server's own data directory (identity, archive, settings). The core
 # keeps its tree under HOME, so the server sets HOME to this.
