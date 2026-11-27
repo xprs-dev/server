@@ -56,6 +56,9 @@ class StationConfig {
   /// Keep public history for others (XPRS.md 12.9.4).
   final bool publicArchiver;
 
+  /// Honour the public rooms' moderators (XPRS.md 10.10.3).
+  final bool publicModerators;
+
   /// Use the local network lanes (core XprsLan.enabled).
   final bool lan;
 
@@ -68,6 +71,7 @@ class StationConfig {
     this.hubs,
     this.nickname = ServerConfig.defaultNickname,
     this.publicArchiver = true,
+    this.publicModerators = true,
     this.lan = true,
     this.shareDirs = const [],
   });
@@ -102,6 +106,7 @@ class Station {
     // history for others (XPRS.md 12.9.4) unless the config says otherwise.
     await store.setBool('xprs.public', config.publicArchiver);
     await prefs.setXprsAlwaysOn(config.publicArchiver);
+    await prefs.setXprsHonourPublicModerators(config.publicModerators);
 
     xprsBindWireCallsign();
     XprsLan.enabled = config.lan;

@@ -127,6 +127,7 @@ config file > built-in default**.
 | `hubs` | `--hub host[:port]` (repeat) | the core's list | uplinks |
 | `nickname` | `--nickname` | Archiver | name given to a new identity; a station still named "XPRS server" (the former default) is renamed |
 | `public_archiver` | `--[no-]public-archiver` | on | keep public history for others |
+| `public_moderators` | `--[no-]public-moderators` | on | honour removals in the Regional and Global rooms by the keys listed at xprs.dev/moderators.json |
 | `data_dir` | `--data-dir` | HOME as it is | identity, archive, settings |
 | `log_file` | `--log-file` | stdout only | also append the log here |
 

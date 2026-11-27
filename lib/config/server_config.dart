@@ -27,6 +27,7 @@ class ServerConfig {
     required this.nickname,
     required this.dataDir,
     required this.publicArchiver,
+    required this.publicModerators,
     required this.logFile,
     required this.publicName,
     required this.httpsPort,
@@ -57,6 +58,10 @@ class ServerConfig {
 
   /// Keep public history for others (XPRS.md 12.9.4).
   final bool publicArchiver;
+
+  /// Honour the removals of the public rooms' moderators, the keys listed
+  /// at xprs.dev/moderators.json (XPRS.md 10.10.3).
+  final bool publicModerators;
 
   /// Also append the log here. Null: stdout only (the journal under systemd).
   final String? logFile;
@@ -114,6 +119,7 @@ class ServerConfig {
     'nickname',
     'data_dir',
     'public_archiver',
+    'public_moderators',
     'log_file',
     'public_name',
     'https_port',
@@ -145,6 +151,7 @@ class ServerConfig {
     'nickname': defaultNickname,
     'data_dir': null,
     'public_archiver': true,
+    'public_moderators': true,
     'log_file': null,
     'public_name': true,
     'https_port': 443,
@@ -187,6 +194,7 @@ class ServerConfig {
       nickname: values['nickname'] as String,
       dataDir: values['data_dir'] as String?,
       publicArchiver: values['public_archiver'] as bool,
+      publicModerators: values['public_moderators'] as bool,
       logFile: values['log_file'] as String?,
       publicName: values['public_name'] as bool,
       httpsPort: values['https_port'] as int,
@@ -214,6 +222,7 @@ class ServerConfig {
       'nickname': nickname,
       'data_dir': dataDir ?? '(HOME as it is)',
       'public_archiver': publicArchiver,
+      'public_moderators': publicModerators,
       'log_file': logFile ?? '(stdout only)',
       'public_name': publicName,
       'https_port': httpsPort,
@@ -257,6 +266,7 @@ Map<String, Object?> _validate(Map<String, Object?> m, String from) {
         if (v is! int || v < 1 || v > 65535) throw bad('a port, 1-65535');
         out[k] = v;
       case 'public_archiver':
+      case 'public_moderators':
       case 'public_name':
       case 'upnp':
       case 'lan':
@@ -429,6 +439,11 @@ http_port: $httpPort
 
 # Keep public history for other stations (an archiver).
 # public_archiver: true
+
+# Honour the moderators of the Regional and Global rooms: a message removed
+# by a key listed at https://xprs.dev/moderators.json is dropped from what
+# this station keeps and serves. Off: their removals change nothing here.
+# public_moderators: true
 
 # Keep the program current from its GitHub releases. The service installer
 # adds a timer that runs `xprs-server update` every six hours: a newer

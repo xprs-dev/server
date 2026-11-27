@@ -77,6 +77,11 @@ ArgParser buildParser() => ArgParser()
     help: 'keep public history for others (default on)',
     defaultsTo: null,
   )
+  ..addFlag(
+    'public-moderators',
+    help: "honour the public rooms' moderators listed at xprs.dev (default on)",
+    defaultsTo: null,
+  )
   ..addOption('log-file', help: 'also append the log to this file')
   ..addFlag('public-name',
       help: 'nip.io name + Let\'s Encrypt HTTPS when reachable (default on)')
@@ -151,6 +156,9 @@ Invocation parseInvocation(List<String> argv) {
   if (r.wasParsed('data-dir')) o['data_dir'] = r['data-dir'];
   if (r.wasParsed('public-archiver')) {
     o['public_archiver'] = r['public-archiver'];
+  }
+  if (r.wasParsed('public-moderators')) {
+    o['public_moderators'] = r['public-moderators'];
   }
   if (r.wasParsed('log-file')) o['log_file'] = r['log-file'];
   if (r.wasParsed('https-port')) port('https-port', 'https_port');

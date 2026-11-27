@@ -42,6 +42,7 @@ void main() {
       expect(c.rnsPort, 4242);
       expect(c.hubs, isEmpty);
       expect(c.publicArchiver, isTrue);
+      expect(c.publicModerators, isTrue);
       expect(c.sources['http_port'], 'default');
     });
 
@@ -180,6 +181,7 @@ void main() {
       final i = parseInvocation([
         'print-config',
         '--no-public-archiver',
+        '--no-public-moderators',
         '--data-dir',
         '/d',
         '--log-file',
@@ -189,6 +191,7 @@ void main() {
       ]);
       expect(i.command, 'print-config');
       expect(i.overrides['public_archiver'], false);
+      expect(i.overrides['public_moderators'], false);
       expect(i.overrides['data_dir'], '/d');
       expect(i.overrides['log_file'], '/l');
       expect(i.configPath, '/c.yaml');

@@ -179,6 +179,7 @@ Future<void> _run(
       hubs: config.hubs.isEmpty ? null : config.hubs,
       nickname: config.nickname,
       publicArchiver: config.publicArchiver,
+      publicModerators: config.publicModerators,
       lan: config.lan,
       shareDirs: config.shareDirs,
     ),
