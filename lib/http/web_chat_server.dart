@@ -249,7 +249,8 @@ class WebChatServer implements AcmeWebServer {
     // arriving through a reverse proxy is also a loopback socket, which is
     // why the forwarded-for header refuses it.
     if (req.method == 'GET' && fwd == null && _isLoopback(req)) {
-      final reading = xprsBenchStatus(req.uri.path);
+      final reading = xprsBenchStatus(req.uri.path,
+          query: req.uri.queryParameters);
       if (reading != null) {
         res.headers.contentType = ContentType.json;
         res.write(jsonEncode({'ok': true, ...reading}));
